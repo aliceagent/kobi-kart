@@ -347,6 +347,19 @@ export default class RaceScene extends Phaser.Scene {
     this.traps.push({ sprite, x, y, life: 14, grace: 0.6, owner: kart });
   }
 
+  // True if a shell at (x,y) with radius r is touching a guard rail or a solid
+  // off-road prop.
+  hitsEnvironment(x, y, r) {
+    for (const o of this.obstacles) {
+      if ((x - o.x) ** 2 + (y - o.y) ** 2 < (r + o.radius) ** 2) return true;
+    }
+    const railReach = r + 6; // rails are ~12px thick
+    for (const s of this.rails) {
+      if (distToSegSq(x, y, s.ax, s.ay, s.bx, s.by) < railReach * railReach) return true;
+    }
+    return false;
+  }
+
   updateProjectiles(dt) {
     for (let i = this.projectiles.length - 1; i >= 0; i -= 1) {
       const p = this.projectiles[i];
@@ -389,6 +402,12 @@ export default class RaceScene extends Phaser.Scene {
             break;
           }
         }
+      }
+      // Shells shatter when they hit a wall (guard rail) or a solid prop.
+      if (!dead && this.hitsEnvironment(p.x, p.y, 9)) {
+        this.burst(p.x, p.y, p.homing ? 0xff8a8a : 0x9bf0a6);
+        Audio.sfx('bump');
+        dead = true;
       }
       if (dead) { p.sprite.destroy(); this.projectiles.splice(i, 1); }
     }
