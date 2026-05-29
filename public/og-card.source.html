@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1200px; height: 630px; overflow: hidden; }
+  body {
+    font-family: "Courier New", monospace;
+    position: relative;
+    background: linear-gradient(#5fb8ee 0%, #8ed4f4 48%, #9bdcf6 60%, #7ec850 60%, #74bd46 100%);
+  }
+  .sun {
+    position: absolute; top: 70px; right: 110px; width: 150px; height: 150px;
+    border-radius: 50%; background: radial-gradient(circle at 38% 38%, #ffe884, #ffd23f 70%);
+    box-shadow: 0 0 0 14px rgba(255,225,77,.35), 0 0 60px 10px rgba(255,210,63,.5);
+  }
+  .ray { position: absolute; top: 145px; right: 185px; width: 0; height: 0; }
+  .cloud { position: absolute; background: #fff; border-radius: 40px; opacity: .95; }
+  .c1 { width: 180px; height: 56px; top: 90px; left: 120px; box-shadow: 60px 10px 0 -8px #fff, -55px 12px 0 -12px #fff; }
+  .c2 { width: 130px; height: 44px; top: 150px; left: 360px; box-shadow: 44px 8px 0 -8px #fff, -40px 9px 0 -10px #fff; }
+  .title {
+    position: absolute; top: 150px; left: 0; right: 0; text-align: center;
+    font-size: 150px; font-weight: 900; letter-spacing: 4px;
+    color: #ffe14d; -webkit-text-stroke: 9px #c0392b;
+    paint-order: stroke fill;
+    text-shadow: 0 10px 0 rgba(0,0,0,.18);
+  }
+  .tag {
+    position: absolute; top: 330px; left: 0; right: 0; text-align: center;
+    font-size: 30px; font-weight: 700; color: #12415c;
+  }
+  /* Road strip */
+  .road { position: absolute; bottom: 0; left: 0; width: 100%; height: 150px; background: #4a4a55;
+          border-top: 7px solid #fff; }
+  .dash { position: absolute; bottom: 70px; left: 0; width: 100%; height: 6px;
+          background: repeating-linear-gradient(90deg, #ffe14d 0 44px, transparent 44px 96px); }
+  .finish { position: absolute; bottom: 0; left: 540px; width: 54px; height: 150px;
+            background-image:
+              linear-gradient(45deg, #111 25%, transparent 25%, transparent 75%, #111 75%),
+              linear-gradient(45deg, #111 25%, #fff 25%, #fff 75%, #111 75%);
+            background-size: 27px 27px; background-position: 0 0, 13.5px 13.5px; background-color: #fff; }
+  .kart { position: absolute; bottom: 52px; width: 78px; height: 50px; border-radius: 12px;
+          border: 5px solid #1c1c22; }
+  .kart::after { content:""; position:absolute; right:7px; top:9px; width:18px; height:24px;
+                 background:#bfe9ff; border-radius:5px; }
+  .kred { left: 250px; background: #ff4d4d; }
+  .kblue { left: 360px; bottom: 64px; background: #4d8bff; }
+  .kyellow { left: 720px; background: #ffd23f; }
+  .pill {
+    position: absolute; top: 392px; left: 0; right: 0; text-align: center;
+  }
+  .pill span {
+    display: inline-block; background: #c0392b; color: #fff; font-weight: 800;
+    font-size: 24px; padding: 12px 28px; border-radius: 30px;
+    box-shadow: 0 6px 0 rgba(0,0,0,.2);
+  }
+</style>
+</head>
+<body>
+  <div class="sun"></div>
+  <div class="cloud c1"></div>
+  <div class="cloud c2"></div>
+  <div class="title">KOBI KART</div>
+  <div class="tag">2-player couch kart racing · power-ups · procedural tracks</div>
+  <div class="pill"><span>▶  Play free in your browser</span></div>
+  <div class="road"></div>
+  <div class="dash"></div>
+  <div class="finish"></div>
+  <div class="kart kred"></div>
+  <div class="kart kblue"></div>
+  <div class="kart kyellow"></div>
+</body>
+</html>
