@@ -55,14 +55,21 @@ export default class TitleScene extends Phaser.Scene {
     this.makeButton(W / 2, H * 0.688, `SETTINGS · AI ${diff}`, 0x9b6bce,
       () => this.scene.start('SettingsScene'), { w: 320, h: 40, fontSize: 17 });
 
-    // Controls — one labelled line per player so every key is clear.
-    const ctrlStyle = { fontFamily: 'monospace', fontSize: '13px', color: '#ffffff' };
-    this.add.text(W / 2, H - 42,
+    // Controls — one labelled line per player so every key is clear. A dark
+    // strip + outline keeps them readable over the grass.
+    const cg = this.add.graphics().setDepth(19);
+    cg.fillStyle(0x000000, 0.4);
+    cg.fillRect(0, H - 54, W, 54);
+    const ctrlStyle = {
+      fontFamily: 'monospace', fontSize: '13px', color: '#ffffff',
+      stroke: '#000000', strokeThickness: 3,
+    };
+    this.add.text(W / 2, H - 40,
       'P1:  A/D steer · S brake · W boost · E or SPACE = use item        M = mute',
-      ctrlStyle).setOrigin(0.5).setDepth(20).setAlpha(0.9);
-    this.add.text(W / 2, H - 22,
+      ctrlStyle).setOrigin(0.5).setDepth(20);
+    this.add.text(W / 2, H - 20,
       'P2:  ←/→ steer · ↓ brake · ↑ boost · RIGHT-SHIFT, \\ or / = use item',
-      ctrlStyle).setOrigin(0.5).setDepth(20).setAlpha(0.9);
+      ctrlStyle).setOrigin(0.5).setDepth(20);
 
     addMuteButton(this);
 
@@ -173,7 +180,7 @@ export default class TitleScene extends Phaser.Scene {
     tree(70, horizon + 18, 1); tree(W - 60, horizon + 26, 1.1);
 
     const roadTop = H * 0.74;
-    const roadBot = H * 0.92;
+    const roadBot = H * 0.85;
     g.fillStyle(0xffffff, 1); g.fillRect(0, roadTop - 5, W, roadBot - roadTop + 10);
     g.fillStyle(0x4a4a55, 1); g.fillRect(0, roadTop, W, roadBot - roadTop);
     const cell = 18;
@@ -189,7 +196,7 @@ export default class TitleScene extends Phaser.Scene {
   }
 
   addCruisingKarts(W, H) {
-    const laneY = (H * 0.74 + H * 0.92) / 2;
+    const laneY = (H * 0.74 + H * 0.85) / 2;
     ROSTER.forEach((r, i) => {
       const k = this.add.image(-80 - i * 120, laneY + (i % 2 ? 18 : -16), `kart_${r.id}`).setDepth(5).setScale(1.5);
       this.karts.push(k);
