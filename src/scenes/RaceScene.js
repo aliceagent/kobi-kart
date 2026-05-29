@@ -143,23 +143,23 @@ export default class RaceScene extends Phaser.Scene {
     });
 
     // Human control keys.
+    const KC = Phaser.Input.Keyboard.KeyCodes;
     if (this.humans[0]) {
       this.keysP1 = this.input.keyboard.addKeys({
-        left: Phaser.Input.Keyboard.KeyCodes.A,
-        right: Phaser.Input.Keyboard.KeyCodes.D,
-        brake: Phaser.Input.Keyboard.KeyCodes.S,
-        boost: Phaser.Input.Keyboard.KeyCodes.W,
-        item: Phaser.Input.Keyboard.KeyCodes.SHIFT,
+        left: KC.A, right: KC.D, brake: KC.S, boost: KC.W,
       });
+      // P1 launches an item with E or Space.
+      this.p1ItemKeys = [this.input.keyboard.addKey(KC.E), this.input.keyboard.addKey(KC.SPACE)];
     }
     if (this.humans[1]) {
       this.keysP2 = this.input.keyboard.addKeys({
-        left: Phaser.Input.Keyboard.KeyCodes.LEFT,
-        right: Phaser.Input.Keyboard.KeyCodes.RIGHT,
-        brake: Phaser.Input.Keyboard.KeyCodes.DOWN,
-        boost: Phaser.Input.Keyboard.KeyCodes.UP,
-        item: Phaser.Input.Keyboard.KeyCodes.ENTER,
+        left: KC.LEFT, right: KC.RIGHT, brake: KC.DOWN, boost: KC.UP,
       });
+      // P2 launches an item with \ or / ...
+      this.p2ItemKeys = [this.input.keyboard.addKey(KC.BACK_SLASH), this.input.keyboard.addKey(KC.FORWARD_SLASH)];
+      // ...or the RIGHT Shift specifically (edge-triggered via the DOM event).
+      this.p2RightShiftFired = false;
+      this.input.keyboard.on('keydown-SHIFT', (e) => { if (e.location === 2) this.p2RightShiftFired = true; });
     }
   }
 
@@ -636,10 +636,12 @@ export default class RaceScene extends Phaser.Scene {
       input = this.aiControl(kart);
     } else if (kart === this.humans[0]) {
       input = this.readKeys(this.keysP1);
-      if (Phaser.Input.Keyboard.JustDown(this.keysP1.item)) this.useItem(kart);
+      if (this.p1ItemKeys.some((k) => Phaser.Input.Keyboard.JustDown(k))) this.useItem(kart);
     } else {
       input = this.readKeys(this.keysP2);
-      if (Phaser.Input.Keyboard.JustDown(this.keysP2.item)) this.useItem(kart);
+      let fire = this.p2ItemKeys.some((k) => Phaser.Input.Keyboard.JustDown(k));
+      if (this.p2RightShiftFired) { fire = true; this.p2RightShiftFired = false; }
+      if (fire) this.useItem(kart);
     }
     // AI uses items shortly after grabbing one.
     if (kart.isAI && kart.heldItem && !kart.spunOut && Math.random() < this.aiCfg.itemChance) this.useItem(kart);

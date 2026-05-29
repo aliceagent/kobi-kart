@@ -33,7 +33,7 @@ export default class TitleScene extends Phaser.Scene {
       () => this.scene.start('SettingsScene'), { w: 320, h: 42, fontSize: 18 });
 
     this.add.text(W / 2, H - 22,
-      'P1: A/D · S · W · Shift      P2: ←/→ · ↓ · ↑ · Enter      M: mute',
+      'P1: A/D · S · W · E/Space      P2: ←/→ · ↓ · ↑ · RShift or \\ //      M: mute',
       { fontFamily: 'monospace', fontSize: '13px', color: '#ffffff' })
       .setOrigin(0.5).setDepth(20).setAlpha(0.85);
 
