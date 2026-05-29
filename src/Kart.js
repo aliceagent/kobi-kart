@@ -8,6 +8,11 @@ export const TUNE = {
   offRoadMax: 130,
   offRoadBoostSpeed: 230,
   itemBoostOffRoadSpeed: 470, // power-up boost shrugs off rough terrain (faster than normal on-road)
+  // Desert (Beach) sand is heavier: slower off-road, and even a power-up boost
+  // stays below on-road speed (340), so the road is always faster.
+  desertOffRoadMax: 85,
+  desertOffRoadBoostSpeed: 150,
+  desertItemBoostOffRoadSpeed: 210,
   accel: 260,
   brakeDecel: 440,
   overspeedDecel: 650,
@@ -86,7 +91,7 @@ export default class Kart {
     return true;
   }
 
-  drive(dt, steer, braking, wantBoost, onRoad, slippery = false) {
+  drive(dt, steer, braking, wantBoost, onRoad, slippery = false, desert = false) {
     this.prevX = this.x;
     this.prevY = this.y;
 
@@ -133,9 +138,13 @@ export default class Kart {
     }
 
     let cap;
-    if (this.itemBoostTimer > 0) cap = onRoad ? TUNE.itemBoostSpeed : TUNE.itemBoostOffRoadSpeed;
-    else if (this.boosting) cap = onRoad ? TUNE.boostSpeed : TUNE.offRoadBoostSpeed;
-    else cap = onRoad ? TUNE.maxSpeed : TUNE.offRoadMax;
+    if (this.itemBoostTimer > 0) {
+      cap = onRoad ? TUNE.itemBoostSpeed : (desert ? TUNE.desertItemBoostOffRoadSpeed : TUNE.itemBoostOffRoadSpeed);
+    } else if (this.boosting) {
+      cap = onRoad ? TUNE.boostSpeed : (desert ? TUNE.desertOffRoadBoostSpeed : TUNE.offRoadBoostSpeed);
+    } else {
+      cap = onRoad ? TUNE.maxSpeed : (desert ? TUNE.desertOffRoadMax : TUNE.offRoadMax);
+    }
     cap *= this.speedMul;
 
     if (braking) {

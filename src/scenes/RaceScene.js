@@ -703,7 +703,8 @@ export default class RaceScene extends Phaser.Scene {
 
     const onRoad = this.isOnRoad(kart.x, kart.y);
     const slippery = !onRoad && this.theme.name === 'Ice'; // off-road ice is slick
-    kart.drive(dt, input.steer, input.braking, input.boosting, onRoad, slippery);
+    const desert = !onRoad && this.theme.name === 'Beach'; // off-road sand is heavy/slow
+    kart.drive(dt, input.steer, input.braking, input.boosting, onRoad, slippery, desert);
   }
 
   computeOrder() {
