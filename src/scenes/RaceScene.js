@@ -309,18 +309,6 @@ export default class RaceScene extends Phaser.Scene {
     else if (item === 'trap') this.spawnTrap(kart);
   }
 
-  // Find the racer one position ahead of this kart (the homing target).
-  racerAhead(kart) {
-    let best = null;
-    for (const r of this.racers) {
-      if (r === kart || r.finished) continue;
-      if ((r.livePlace || 99) < (kart.livePlace || 99)) {
-        if (!best || r.livePlace > best.livePlace) best = r;
-      }
-    }
-    return best;
-  }
-
   spawnProjectile(kart, homing) {
     const ox = Math.cos(kart.heading);
     const oy = Math.sin(kart.heading);
@@ -331,9 +319,7 @@ export default class RaceScene extends Phaser.Scene {
       sprite, x: sprite.x, y: sprite.y,
       vx: ox * speed, vy: oy * speed, speed,
       owner: kart, homing,
-      target: homing ? this.racerAhead(kart) : null,
-      turnRate: 2.7, // limited — hard turns / boosts can shake it
-      homingRange: 760, // beyond this it flies straight (outrun it to escape)
+      turnRate: 3.8, // enough to follow the racing line through corners
       life: homing ? 5 : 3,
     });
   }
@@ -365,24 +351,23 @@ export default class RaceScene extends Phaser.Scene {
       const p = this.projectiles[i];
       p.life -= dt;
 
-      // Red shells home in on their target — but only within a limited range
-      // and with a limited turn rate, so boosting away or a hard turn can shake
-      // it. (It re-acquires the next racer ahead if its target finishes.)
+      // Red shells chase along the racing line (so they stay on the road)
+      // rather than cutting straight at the target. Limited turn rate + 5s
+      // lifetime keep them escapable by boosting away. If one does stray off
+      // the track, rough terrain slows it down just like a kart.
       if (p.homing) {
-        if (!p.target || p.target.finished) p.target = this.racerAhead(p.owner);
-        if (p.target) {
-          const dx = p.target.x - p.x;
-          const dy = p.target.y - p.y;
-          const dist = Math.hypot(dx, dy);
-          if (dist < p.homingRange) {
-            const desired = Math.atan2(dy, dx);
-            const cur = Math.atan2(p.vy, p.vx);
-            const turn = Phaser.Math.Clamp(Phaser.Math.Angle.Wrap(desired - cur), -p.turnRate * dt, p.turnRate * dt);
-            const a = cur + turn;
-            p.vx = Math.cos(a) * p.speed;
-            p.vy = Math.sin(a) * p.speed;
-          }
-        }
+        const n = this.centerline.length;
+        const onRoad = this.isOnRoad(p.x, p.y);
+        const idx = this.nearestIndex(p.x, p.y);
+        const look = onRoad ? 5 : 2; // off-road: aim closer to cut back onto the track
+        const aim = this.centerline[(idx + look) % n];
+        const desired = Math.atan2(aim.y - p.y, aim.x - p.x);
+        const cur = Math.atan2(p.vy, p.vx);
+        const turn = Phaser.Math.Clamp(Phaser.Math.Angle.Wrap(desired - cur), -p.turnRate * dt, p.turnRate * dt);
+        const a = cur + turn;
+        const eff = onRoad ? p.speed : p.speed * 0.5; // rough-terrain penalty
+        p.vx = Math.cos(a) * eff;
+        p.vy = Math.sin(a) * eff;
       }
 
       p.x += p.vx * dt;
