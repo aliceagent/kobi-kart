@@ -28,6 +28,39 @@ function starPoints(cx, cy, outer, inner, n, rot) {
   return pts;
 }
 
+// A top-down turtle shell: domed shell with a central scute and radiating
+// segment lines, a rim, and a highlight.
+function makeShell(scene, key, base, rim, dark, light) {
+  if (scene.textures.exists(key)) return;
+  const s = 28;
+  const c = s / 2;
+  const R = s / 2;
+  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+  g.fillStyle(0x16161c, 1); g.fillCircle(c, c, R);          // dark outline
+  g.fillStyle(rim, 1); g.fillCircle(c, c, R - 1.5);          // rim
+  g.fillStyle(base, 1); g.fillCircle(c, c, R - 4);           // dome
+  // Radiating segment lines.
+  g.lineStyle(1.5, dark, 1);
+  for (let k = 0; k < 6; k += 1) {
+    const a = (k / 6) * Math.PI * 2 + Math.PI / 6;
+    g.beginPath();
+    g.moveTo(c + Math.cos(a) * (R * 0.32), c + Math.sin(a) * (R * 0.32));
+    g.lineTo(c + Math.cos(a) * (R - 4), c + Math.sin(a) * (R - 4));
+    g.strokePath();
+  }
+  // Central scute (hexagon).
+  const hex = [];
+  for (let k = 0; k < 6; k += 1) {
+    const a = (k / 6) * Math.PI * 2 + Math.PI / 6;
+    hex.push({ x: c + Math.cos(a) * R * 0.34, y: c + Math.sin(a) * R * 0.34 });
+  }
+  g.fillStyle(dark, 1); g.fillPoints(hex, true);
+  g.fillStyle(light, 0.9); g.fillCircle(c, c, R * 0.16);
+  g.fillStyle(0xffffff, 0.5); g.fillCircle(c - R * 0.4, c - R * 0.4, R * 0.16);
+  g.generateTexture(key, s, s);
+  g.destroy();
+}
+
 export function makeGameTextures(scene) {
   // Item box: bright rounded square with a white star.
   if (!scene.textures.exists('itembox')) {
@@ -45,24 +78,9 @@ export function makeGameTextures(scene) {
     g.destroy();
   }
 
-  // Projectile: a green spiky shell.
-  if (!scene.textures.exists('shell')) {
-    const s = 24;
-    const g = scene.make.graphics({ x: 0, y: 0, add: false });
-    g.fillStyle(0x1c1c22, 1);
-    g.fillCircle(s / 2, s / 2, s / 2);
-    g.fillStyle(0x33c75a, 1);
-    g.fillCircle(s / 2, s / 2, s / 2 - 2);
-    g.fillStyle(0x1f8f3f, 1);
-    for (let k = 0; k < 6; k += 1) {
-      const a = (k / 6) * Math.PI * 2;
-      g.fillCircle(s / 2 + Math.cos(a) * 5, s / 2 + Math.sin(a) * 5, 2.5);
-    }
-    g.fillStyle(0xffffff, 0.8);
-    g.fillCircle(s * 0.38, s * 0.38, 2.5);
-    g.generateTexture('shell', s, s);
-    g.destroy();
-  }
+  // Projectile turtle shells (green = straight, red = homing).
+  makeShell(scene, 'shell_green', 0x3ecf5a, 0x1f8f3f, 0x14662b, 0x9bf0a6);
+  makeShell(scene, 'shell_red', 0xff5a5a, 0xc0392b, 0x8e1f1f, 0xffc2c2);
 
   // Trap: an oil slick.
   if (!scene.textures.exists('oil')) {

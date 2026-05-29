@@ -34,6 +34,10 @@ export default class UIScene extends Phaser.Scene {
     this.p1Text = this.add.text(16, 12, '', style).setDepth(11);
     this.p2Text = this.add.text(W - 16, 12, '', style).setOrigin(1, 0).setDepth(11);
 
+    this.stragglerText = this.add.text(W / 2, 40, '', {
+      fontFamily: 'monospace', fontSize: '15px', color: '#ffe14d', fontStyle: 'bold',
+    }).setOrigin(0.5, 0).setDepth(11);
+
     addMuteButton(this);
   }
 
@@ -68,15 +72,21 @@ export default class UIScene extends Phaser.Scene {
       g.fillStyle(0xffd23f, 1);
       g.fillTriangle(cx - 10, cy - 8, cx - 10, cy + 8, cx - 1, cy);
       g.fillTriangle(cx - 1, cy - 8, cx - 1, cy + 8, cx + 8, cy);
-    } else if (item === 'projectile') {
-      g.fillStyle(0x1c1c22, 1); g.fillCircle(cx, cy, 11);
-      g.fillStyle(0x33c75a, 1); g.fillCircle(cx, cy, 9);
-      g.fillStyle(0x1f8f3f, 1);
+    } else if (item === 'greenShell' || item === 'redShell') {
+      const base = item === 'redShell' ? 0xff5a5a : 0x3ecf5a;
+      const rim = item === 'redShell' ? 0xc0392b : 0x1f8f3f;
+      const dark = item === 'redShell' ? 0x8e1f1f : 0x14662b;
+      g.fillStyle(0x16161c, 1); g.fillCircle(cx, cy, 12);
+      g.fillStyle(rim, 1); g.fillCircle(cx, cy, 10.5);
+      g.fillStyle(base, 1); g.fillCircle(cx, cy, 8);
+      g.lineStyle(1.5, dark, 1);
+      const hex = [];
       for (let k = 0; k < 6; k += 1) {
-        const a = (k / 6) * Math.PI * 2;
-        g.fillCircle(cx + Math.cos(a) * 4, cy + Math.sin(a) * 4, 2);
+        const a = (k / 6) * Math.PI * 2 + Math.PI / 6;
+        hex.push({ x: cx + Math.cos(a) * 4, y: cy + Math.sin(a) * 4 });
       }
-      g.fillStyle(0xffffff, 0.85); g.fillCircle(cx - 3, cy - 3, 2);
+      g.fillStyle(dark, 1); g.fillPoints(hex, true);
+      g.fillStyle(0xffffff, 0.5); g.fillCircle(cx - 4, cy - 4, 2);
     } else if (item === 'trap') {
       g.fillStyle(0x15151c, 0.95); g.fillEllipse(cx, cy + 2, 28, 16);
       g.fillStyle(0x6f6ab0, 0.8); g.fillEllipse(cx - 4, cy - 2, 9, 5);
@@ -97,6 +107,14 @@ export default class UIScene extends Phaser.Scene {
     const themeName = race.theme ? race.theme.name.toUpperCase() : '';
     this.banner.setText(`RACE ${race.gp.raceIndex + 1}/4   ·   ${themeName}   ·   LAP ${lap}/${LAPS}`);
     this.countdownLabel.setText(race.countdownText || '');
+
+    // When only the last racer remains, show their 60s finish clock.
+    if (race.stragglerDeadline !== null && race.state === 'racing') {
+      const left = Math.max(0, Math.ceil(race.stragglerDeadline - race.raceElapsed));
+      this.stragglerText.setText(`LAST RACER — ${left}s to finish`);
+    } else {
+      this.stragglerText.setText('');
+    }
 
     const h0 = race.humans[0];
     if (h0) {

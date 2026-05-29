@@ -13,9 +13,17 @@ const RAIL_MIN_SPEED = 100;
 const OBSTACLE_MIN_SPEED = 90;
 // Race ends when everyone finishes — or, once 60s have passed, as soon as only
 // a single straggler is left. A generous hard cap prevents a true soft-lock.
-const STRAGGLER_AFTER = 60; // seconds (since GO) before we stop waiting on a lone last racer
-const RACE_HARD_CAP = 180; // absolute safety cap (since GO)
-const ITEM_KINDS = ['boost', 'projectile', 'trap', 'shield'];
+const STRAGGLER_GRACE = 60; // seconds the last racer gets after the 3rd finisher
+const RACE_HARD_CAP = 240; // absolute safety cap (since GO)
+
+// Position-based item odds (Mario-Kart style): leaders get defensive/area-denial
+// items, trailers get catch-up items. Keyed by live race position (1 = first).
+const ITEM_WEIGHTS = {
+  1: { trap: 4, shield: 3, greenShell: 2 },
+  2: { greenShell: 3, trap: 2, shield: 1, boost: 2, redShell: 1 },
+  3: { boost: 3, greenShell: 2, redShell: 2, trap: 1, shield: 1 },
+  4: { boost: 4, redShell: 3, shield: 1, greenShell: 1 },
+};
 
 function closestOnSeg(px, py, ax, ay, bx, by) {
   const dx = bx - ax;
@@ -76,7 +84,7 @@ export default class RaceScene extends Phaser.Scene {
     this.elapsed = 0;
     this.raceElapsed = 0; // time since GO (excludes the countdown)
     this.finishCount = 0;
-    this.firstFinishTime = null;
+    this.stragglerDeadline = null; // set when only the last racer remains
     this.order = this.racers.slice();
 
     Audio.resumeAudio();
@@ -158,7 +166,7 @@ export default class RaceScene extends Phaser.Scene {
   createItemBoxes() {
     const n = this.centerline.length;
     this.itemBoxes = [];
-    const count = 9;
+    const count = 18;
     for (let i = 0; i < count; i += 1) {
       const idx = Math.round(((i + 0.5) * n) / count) % n;
       const p = this.centerline[idx];
@@ -251,8 +259,12 @@ export default class RaceScene extends Phaser.Scene {
     kart.finished = true;
     this.finishCount += 1;
     kart.place = this.finishCount;
-    if (this.firstFinishTime === null) this.firstFinishTime = this.elapsed;
     if (!kart.isAI) Audio.sfx('finish');
+    // Once everyone but the last racer is in, give that straggler 60s to finish.
+    const unfinished = this.racers.reduce((c, r) => c + (r.finished ? 0 : 1), 0);
+    if (unfinished === 1 && this.stragglerDeadline === null) {
+      this.stragglerDeadline = this.raceElapsed + STRAGGLER_GRACE;
+    }
   }
 
   endRace() {
@@ -275,7 +287,14 @@ export default class RaceScene extends Phaser.Scene {
 
   // ------------------------------------------------------------- items -------
   giveItem(kart) {
-    kart.heldItem = ITEM_KINDS[Math.floor(Math.random() * ITEM_KINDS.length)];
+    const place = Phaser.Math.Clamp(kart.livePlace || 1, 1, 4);
+    const weights = ITEM_WEIGHTS[place];
+    let total = 0;
+    for (const k in weights) total += weights[k];
+    let r = Math.random() * total;
+    let chosen = 'boost';
+    for (const k in weights) { r -= weights[k]; if (r <= 0) { chosen = k; break; } }
+    kart.heldItem = chosen;
   }
 
   useItem(kart) {
@@ -285,17 +304,37 @@ export default class RaceScene extends Phaser.Scene {
     Audio.sfx('item');
     if (item === 'boost') { kart.itemBoostTimer = 1.6; Audio.sfx('boost'); this.burst(kart.x, kart.y, 0xffd23f); }
     else if (item === 'shield') { kart.shieldTimer = 6; }
-    else if (item === 'projectile') this.spawnProjectile(kart);
+    else if (item === 'greenShell') this.spawnProjectile(kart, false);
+    else if (item === 'redShell') this.spawnProjectile(kart, true);
     else if (item === 'trap') this.spawnTrap(kart);
   }
 
-  spawnProjectile(kart) {
-    const sp = 480 + kart.speed;
+  // Find the racer one position ahead of this kart (the homing target).
+  racerAhead(kart) {
+    let best = null;
+    for (const r of this.racers) {
+      if (r === kart || r.finished) continue;
+      if ((r.livePlace || 99) < (kart.livePlace || 99)) {
+        if (!best || r.livePlace > best.livePlace) best = r;
+      }
+    }
+    return best;
+  }
+
+  spawnProjectile(kart, homing) {
     const ox = Math.cos(kart.heading);
     const oy = Math.sin(kart.heading);
-    const sprite = this.add.image(kart.x + ox * 26, kart.y + oy * 26, 'shell').setDepth(13);
+    const key = homing ? 'shell_red' : 'shell_green';
+    const sprite = this.add.image(kart.x + ox * 28, kart.y + oy * 28, key).setDepth(13);
+    const speed = homing ? 430 : 480 + kart.speed;
     this.projectiles.push({
-      sprite, x: sprite.x, y: sprite.y, vx: ox * sp, vy: oy * sp, owner: kart, life: 3,
+      sprite, x: sprite.x, y: sprite.y,
+      vx: ox * speed, vy: oy * speed, speed,
+      owner: kart, homing,
+      target: homing ? this.racerAhead(kart) : null,
+      turnRate: 2.7, // limited — hard turns / boosts can shake it
+      homingRange: 760, // beyond this it flies straight (outrun it to escape)
+      life: homing ? 5 : 3,
     });
   }
 
@@ -312,10 +351,32 @@ export default class RaceScene extends Phaser.Scene {
     for (let i = this.projectiles.length - 1; i >= 0; i -= 1) {
       const p = this.projectiles[i];
       p.life -= dt;
+
+      // Red shells home in on their target — but only within a limited range
+      // and with a limited turn rate, so boosting away or a hard turn can shake
+      // it. (It re-acquires the next racer ahead if its target finishes.)
+      if (p.homing) {
+        if (!p.target || p.target.finished) p.target = this.racerAhead(p.owner);
+        if (p.target) {
+          const dx = p.target.x - p.x;
+          const dy = p.target.y - p.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist < p.homingRange) {
+            const desired = Math.atan2(dy, dx);
+            const cur = Math.atan2(p.vy, p.vx);
+            const turn = Phaser.Math.Clamp(Phaser.Math.Angle.Wrap(desired - cur), -p.turnRate * dt, p.turnRate * dt);
+            const a = cur + turn;
+            p.vx = Math.cos(a) * p.speed;
+            p.vy = Math.sin(a) * p.speed;
+          }
+        }
+      }
+
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       p.sprite.setPosition(p.x, p.y);
-      p.sprite.rotation += dt * 12;
+      if (p.homing) p.sprite.rotation = Math.atan2(p.vy, p.vx);
+      else p.sprite.rotation += dt * 12;
       let dead = p.life <= 0 || p.x < 0 || p.x > WORLD_W || p.y < 0 || p.y > WORLD_H;
       if (!dead) {
         for (const r of this.racers) {
@@ -529,7 +590,7 @@ export default class RaceScene extends Phaser.Scene {
     // only one racer is still going (we stop waiting on a lone straggler).
     const unfinished = this.racers.reduce((c, r) => c + (r.finished ? 0 : 1), 0);
     if (unfinished === 0
-      || (this.raceElapsed >= STRAGGLER_AFTER && unfinished <= 1)
+      || (this.stragglerDeadline !== null && this.raceElapsed >= this.stragglerDeadline)
       || this.raceElapsed >= RACE_HARD_CAP) {
       this.endRace();
     }
