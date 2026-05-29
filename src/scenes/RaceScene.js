@@ -72,6 +72,14 @@ export default class RaceScene extends Phaser.Scene {
       emitting: false, gravityY: 0,
     }).setDepth(12);
 
+    // Colourful confetti burst for finish-line crossings.
+    this.confetti = this.add.particles(0, 0, 'spark', {
+      lifespan: 900, speed: { min: 90, max: 300 }, angle: { min: 0, max: 360 },
+      scale: { start: 1.2, end: 0 }, rotate: { min: 0, max: 360 }, gravityY: 160,
+      emitting: false,
+      tint: [0xff5d8f, 0x4d8bff, 0xffd23f, 0x57c75a, 0xb06bff, 0xffffff, 0xff8a3c],
+    }).setDepth(16);
+
     this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
     this.minZoom = Math.max(this.cameras.main.width / WORLD_W, this.cameras.main.height / WORLD_H);
     this.camCenter = new Phaser.Math.Vector2(this.start.x, this.start.y);
@@ -274,8 +282,12 @@ export default class RaceScene extends Phaser.Scene {
     if (wrapped && kart.halfway) {
       kart.halfway = false;
       kart.lap += 1;
-      if (kart.lap >= LAPS) this.finishRacer(kart);
-      else if (!kart.isAI) Audio.sfx('lap');
+      if (kart.lap >= LAPS) {
+        this.finishRacer(kart);
+      } else {
+        if (!kart.isAI) Audio.sfx('lap');
+        this.celebrateCrossing(kart, false);
+      }
     }
   }
 
@@ -285,6 +297,7 @@ export default class RaceScene extends Phaser.Scene {
     this.finishCount += 1;
     kart.place = this.finishCount;
     if (!kart.isAI) Audio.sfx('finish');
+    this.celebrateCrossing(kart, true);
     // Once everyone but the last racer is in, give that straggler 60s to finish.
     const unfinished = this.racers.reduce((c, r) => c + (r.finished ? 0 : 1), 0);
     if (unfinished === 1 && this.stragglerDeadline === null) {
@@ -500,6 +513,22 @@ export default class RaceScene extends Phaser.Scene {
     this.particles.emitParticleAt(x, y, 10);
   }
 
+  // A festive confetti + popup when a racer crosses the line (lap or finish).
+  celebrateCrossing(kart, finished) {
+    this.confetti.emitParticleAt(kart.x, kart.y, finished ? 48 : 26);
+    if (finished) this.cameras.main.flash(220, 255, 255, 220);
+    if (kart.isAI) return;
+    const msg = finished ? 'FINISH!' : `LAP ${Math.min(kart.lap + 1, LAPS)}`;
+    const t = this.add.text(kart.x, kart.y - 28, msg, {
+      fontFamily: 'monospace', fontSize: '34px', color: '#ffe14d', fontStyle: 'bold',
+      stroke: '#c0392b', strokeThickness: 7,
+    }).setOrigin(0.5).setDepth(40);
+    this.tweens.add({
+      targets: t, y: t.y - 80, alpha: { from: 1, to: 0 }, scale: { from: 0.5, to: 1.35 },
+      duration: 1150, ease: 'Cubic.Out', onComplete: () => t.destroy(),
+    });
+  }
+
   // -------------------------------------------------------- collisions -------
   resolveKartCollision(a, b) {
     const dx = b.x - a.x;
@@ -672,7 +701,9 @@ export default class RaceScene extends Phaser.Scene {
     // AI uses items shortly after grabbing one.
     if (kart.isAI && kart.heldItem && !kart.spunOut && Math.random() < this.aiCfg.itemChance) this.useItem(kart);
 
-    kart.drive(dt, input.steer, input.braking, input.boosting, this.isOnRoad(kart.x, kart.y));
+    const onRoad = this.isOnRoad(kart.x, kart.y);
+    const slippery = !onRoad && this.theme.name === 'Ice'; // off-road ice is slick
+    kart.drive(dt, input.steer, input.braking, input.boosting, onRoad, slippery);
   }
 
   computeOrder() {

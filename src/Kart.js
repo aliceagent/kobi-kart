@@ -17,6 +17,8 @@ export const TUNE = {
   minTurnSpeed: 120,
   minTurnFactor: 0.38, // can always rotate at least this much, even when stopped (prevents dead-stop traps)
   knockbackDecay: 5,
+  iceGrip: 0.055, // low traction on off-road ice → drift / fishtail (1 = full grip elsewhere)
+  slipTurnMul: 1.5, // twitchier steering on ice, so the tail swings out
 
   // Boost meter.
   boostMax: 100,
@@ -35,6 +37,8 @@ export default class Kart {
 
     this.heading = heading;
     this.speed = 0;
+    this.vx = 0; // actual velocity (lets the kart slide on low-grip ice)
+    this.vy = 0;
     this.knockX = 0;
     this.knockY = 0;
     this.radius = 17;
@@ -82,7 +86,7 @@ export default class Kart {
     return true;
   }
 
-  drive(dt, steer, braking, wantBoost, onRoad) {
+  drive(dt, steer, braking, wantBoost, onRoad, slippery = false) {
     this.prevX = this.x;
     this.prevY = this.y;
 
@@ -93,6 +97,8 @@ export default class Kart {
 
     if (this.frozen) {
       this.speed = 0;
+      this.vx = 0;
+      this.vy = 0;
       this.knockX *= decay;
       this.knockY *= decay;
       return;
@@ -103,8 +109,10 @@ export default class Kart {
       this.spinTimer -= dt;
       this.heading += TUNE.spinRate * dt;
       this.speed = Math.min(this.speed, 120) * 0.96;
-      this.x += (Math.cos(this.heading) * this.speed + this.knockX) * dt;
-      this.y += (Math.sin(this.heading) * this.speed + this.knockY) * dt;
+      this.vx = Math.cos(this.heading) * this.speed;
+      this.vy = Math.sin(this.heading) * this.speed;
+      this.x += (this.vx + this.knockX) * dt;
+      this.y += (this.vy + this.knockY) * dt;
       this.sprite.rotation = this.heading;
       this.knockX *= decay;
       this.knockY *= decay;
@@ -143,11 +151,21 @@ export default class Kart {
       TUNE.minTurnFactor,
       Phaser.Math.Clamp(Math.abs(this.speed) / TUNE.minTurnSpeed, 0, 1)
     );
-    const turnRate = braking ? TUNE.driftTurnRate : TUNE.turnRate;
+    let turnRate = braking ? TUNE.driftTurnRate : TUNE.turnRate;
+    if (slippery) turnRate *= TUNE.slipTurnMul; // twitchy on ice
     this.heading += steer * turnRate * turnFactor * dt;
 
-    this.x += (Math.cos(this.heading) * this.speed + this.knockX) * dt;
-    this.y += (Math.sin(this.heading) * this.speed + this.knockY) * dt;
+    // The engine pushes along the heading; grip pulls actual velocity toward
+    // that. Full grip (1) snaps instantly (normal handling); low grip on ice
+    // lets velocity lag the heading, so the kart slides and fishtails.
+    const fwdX = Math.cos(this.heading) * this.speed;
+    const fwdY = Math.sin(this.heading) * this.speed;
+    const grip = slippery ? TUNE.iceGrip : 1;
+    this.vx += (fwdX - this.vx) * grip;
+    this.vy += (fwdY - this.vy) * grip;
+
+    this.x += (this.vx + this.knockX) * dt;
+    this.y += (this.vy + this.knockY) * dt;
     this.sprite.rotation = this.heading;
 
     this.knockX *= decay;
