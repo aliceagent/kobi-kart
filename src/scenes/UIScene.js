@@ -24,18 +24,26 @@ export default class UIScene extends Phaser.Scene {
 
     this.banner = this.add.text(W / 2, 14, '', {
       fontFamily: 'monospace', fontSize: '18px', color: '#ffffff',
+      stroke: '#000000', strokeThickness: 4,
     }).setOrigin(0.5, 0).setDepth(11);
 
     this.countdownLabel = this.add.text(W / 2, this.scale.height / 2 - 40, '', {
       fontFamily: 'monospace', fontSize: '96px', color: '#ffffff', fontStyle: 'bold',
+      stroke: '#000000', strokeThickness: 9,
     }).setOrigin(0.5).setDepth(12);
 
-    const style = { fontFamily: 'monospace', fontSize: '16px', color: '#ffffff' };
+    const style = {
+      fontFamily: 'monospace', fontSize: '16px', color: '#ffffff',
+      stroke: '#000000', strokeThickness: 4,
+    };
     this.p1Text = this.add.text(16, 12, '', style).setDepth(11);
     this.p2Text = this.add.text(W - 16, 12, '', style).setOrigin(1, 0).setDepth(11);
 
     // "Use item" key reminder under each player's item box.
-    const hintStyle = { fontFamily: 'monospace', fontSize: '11px', color: '#ffe08a' };
+    const hintStyle = {
+      fontFamily: 'monospace', fontSize: '11px', color: '#ffe08a',
+      stroke: '#000000', strokeThickness: 3,
+    };
     if (this.race && this.race.humans && this.race.humans[0]) {
       this.add.text(16, 99, 'item: E / Space', hintStyle).setDepth(11);
     }
@@ -45,6 +53,7 @@ export default class UIScene extends Phaser.Scene {
 
     this.stragglerText = this.add.text(W / 2, 40, '', {
       fontFamily: 'monospace', fontSize: '15px', color: '#ffe14d', fontStyle: 'bold',
+      stroke: '#000000', strokeThickness: 4,
     }).setOrigin(0.5, 0).setDepth(11);
 
     addMuteButton(this);
