@@ -369,7 +369,7 @@ export default class RaceScene extends Phaser.Scene {
     const sprite = this.add.image(kart.x + ox * 28, kart.y + oy * 28, key).setDepth(13);
 
     let speed; let turnRate; let life;
-    if (type === 'green') { speed = 480 + kart.speed; turnRate = 0; life = 3; }
+    if (type === 'green') { speed = 480 + kart.speed; turnRate = 0; life = 4.5; } // bounces, so lives a bit longer
     else if (type === 'red') { speed = 430; turnRate = 3.8; life = 5; }
     else { speed = 473; turnRate = 4.6; life = 11; } // blue: 10% faster, tighter turns, long reach
 
@@ -401,6 +401,39 @@ export default class RaceScene extends Phaser.Scene {
       if (distToSegSq(x, y, s.ax, s.ay, s.bx, s.by) < railReach * railReach) return true;
     }
     return false;
+  }
+
+  // Reflect a (green) shell off the nearest rail or obstacle it overlaps,
+  // pushing it clear of the surface so it doesn't stick. One bounce per frame.
+  bounceProjectile(p) {
+    const r = 9;
+    const reflect = (nx, ny, surfaceX, surfaceY, minD) => {
+      p.x = surfaceX + nx * minD;
+      p.y = surfaceY + ny * minD;
+      const vdot = p.vx * nx + p.vy * ny;
+      if (vdot < 0) {
+        p.vx -= 2 * vdot * nx;
+        p.vy -= 2 * vdot * ny;
+        p.sprite.rotation = Math.atan2(p.vy, p.vx);
+        this.burst(p.x, p.y, 0x9bf0a6);
+        Audio.sfx('bump');
+      }
+    };
+    for (const o of this.obstacles) {
+      const dx = p.x - o.x;
+      const dy = p.y - o.y;
+      const dist = Math.hypot(dx, dy);
+      const minD = r + o.radius;
+      if (dist < minD && dist > 0.0001) { reflect(dx / dist, dy / dist, o.x, o.y, minD); return; }
+    }
+    for (const s of this.rails) {
+      const c = closestOnSeg(p.x, p.y, s.ax, s.ay, s.bx, s.by);
+      const dx = p.x - c.x;
+      const dy = p.y - c.y;
+      const dist = Math.hypot(dx, dy);
+      const minD = r + 6;
+      if (dist < minD && dist > 0.0001) { reflect(dx / dist, dy / dist, c.x, c.y, minD); return; }
+    }
   }
 
   updateProjectiles(dt) {
@@ -461,12 +494,18 @@ export default class RaceScene extends Phaser.Scene {
           }
         }
       }
-      // Green/red shells shatter on walls and solid props. Blue shells are
-      // relentless — they plough through everything on the way to the leader.
-      if (!dead && !p.blue && this.hitsEnvironment(p.x, p.y, 9)) {
-        this.burst(p.x, p.y, p.homing ? 0xff8a8a : 0x9bf0a6);
-        Audio.sfx('bump');
-        dead = true;
+      if (!dead && !p.blue) {
+        if (p.homing) {
+          // Red shells shatter on walls/props (rare — they hug the road).
+          if (this.hitsEnvironment(p.x, p.y, 9)) {
+            this.burst(p.x, p.y, 0xff8a8a);
+            Audio.sfx('bump');
+            dead = true;
+          }
+        } else {
+          // Green shells ricochet off rails and obstacles instead of dying.
+          this.bounceProjectile(p);
+        }
       }
       if (dead) { p.sprite.destroy(); this.projectiles.splice(i, 1); }
     }
