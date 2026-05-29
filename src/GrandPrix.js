@@ -9,7 +9,7 @@ export const ROSTER = [
 ];
 
 export const POINTS = [10, 6, 3, 1]; // awarded for 1st..4th each race
-export const LAPS = 2; // laps per race (tracks are long, so 2 keeps races snappy)
+export const LAPS = 3; // laps per race
 export const ALL_THEMES = ['Grassy', 'Beach', 'Ice', 'Candy'];
 
 function shuffle(arr) {

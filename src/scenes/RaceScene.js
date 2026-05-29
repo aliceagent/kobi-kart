@@ -11,7 +11,10 @@ const WORLD_H = 2000;
 const RAIL_DRAG = 380;
 const RAIL_MIN_SPEED = 100;
 const OBSTACLE_MIN_SPEED = 90;
-const RACE_TIMEOUT = 14; // seconds after first finisher before forcing the end
+// Race ends when everyone finishes — or, once 60s have passed, as soon as only
+// a single straggler is left. A generous hard cap prevents a true soft-lock.
+const STRAGGLER_AFTER = 60; // seconds (since GO) before we stop waiting on a lone last racer
+const RACE_HARD_CAP = 180; // absolute safety cap (since GO)
 const ITEM_KINDS = ['boost', 'projectile', 'trap', 'shield'];
 
 function closestOnSeg(px, py, ax, ay, bx, by) {
@@ -71,6 +74,7 @@ export default class RaceScene extends Phaser.Scene {
     this.countdown = 3.999;
     this.countdownText = '';
     this.elapsed = 0;
+    this.raceElapsed = 0; // time since GO (excludes the countdown)
     this.finishCount = 0;
     this.firstFinishTime = null;
     this.order = this.racers.slice();
@@ -502,6 +506,7 @@ export default class RaceScene extends Phaser.Scene {
       return;
     }
 
+    this.raceElapsed += dt;
     this.applyRubberBand();
     this.racers.forEach((r) => this.driveRacer(r, dt, false));
 
@@ -520,8 +525,12 @@ export default class RaceScene extends Phaser.Scene {
 
     this.computeOrder();
 
-    if (this.racers.every((r) => r.finished)
-      || (this.firstFinishTime !== null && this.elapsed - this.firstFinishTime > RACE_TIMEOUT)) {
+    // End when everyone has finished, or — once 60s have elapsed — as soon as
+    // only one racer is still going (we stop waiting on a lone straggler).
+    const unfinished = this.racers.reduce((c, r) => c + (r.finished ? 0 : 1), 0);
+    if (unfinished === 0
+      || (this.raceElapsed >= STRAGGLER_AFTER && unfinished <= 1)
+      || this.raceElapsed >= RACE_HARD_CAP) {
       this.endRace();
     }
 
