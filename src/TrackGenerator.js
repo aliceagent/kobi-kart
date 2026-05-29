@@ -198,6 +198,29 @@ function rotateToStraight(centerline) {
 const MIN_TURN_RADIUS = 150; // corners tighter than this (px) get rails
 const RAIL_DILATE = 2; // extend rails this many steps into the corner's entry/exit
 
+function distToSegSq(px, py, ax, ay, bx, by) {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const l2 = dx * dx + dy * dy;
+  let t = l2 > 0 ? ((px - ax) * dx + (py - ay) * dy) / l2 : 0;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const cx = ax + t * dx;
+  const cy = ay + t * dy;
+  return (px - cx) ** 2 + (py - cy) ** 2;
+}
+
+function minDistToCenterlineSq(cl, x, y) {
+  const n = cl.length;
+  let m = Infinity;
+  for (let i = 0; i < n; i += 1) {
+    const a = cl[i];
+    const b = cl[(i + 1) % n];
+    const d = distToSegSq(x, y, a.x, a.y, b.x, b.y);
+    if (d < m) m = d;
+  }
+  return m;
+}
+
 function buildRails(centerline, halfWidth) {
   const n = centerline.length;
   const tan = new Array(n); // unit tangent
@@ -287,7 +310,18 @@ function buildRails(centerline, halfWidth) {
       x: centerline[i].x + sign * tan[i].y * off,
       y: centerline[i].y - sign * tan[i].x * off,
     }));
+    // A rail point is only valid if it's genuinely OUTSIDE the road. Where the
+    // track doubles back or pinches, an offset point can land on another stretch
+    // of road — drop those, and never bridge a segment across a dropped point or
+    // over the road, so rails can never cross or enter the track.
+    const clear = halfWidth + 2;
+    const clearSq = clear * clear;
+    const offRoad = outer.map((p) => minDistToCenterlineSq(centerline, p.x, p.y) >= clearSq);
     for (let k = 0; k < outer.length - 1; k += 1) {
+      if (!offRoad[k] || !offRoad[k + 1]) continue;
+      const mx = (outer[k].x + outer[k + 1].x) / 2;
+      const my = (outer[k].y + outer[k + 1].y) / 2;
+      if (minDistToCenterlineSq(centerline, mx, my) < clearSq) continue; // segment bows over the road
       rails.push({ ax: outer[k].x, ay: outer[k].y, bx: outer[k + 1].x, by: outer[k + 1].y });
     }
   }
