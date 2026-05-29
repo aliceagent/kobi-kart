@@ -78,6 +78,7 @@ export default class Kart {
     this.name = '';
     this.aiSkill = 1;
     this.speedMul = 1; // rubber-banding for AI
+    this.speedScale = 1; // global car-speed setting (slow/medium/fast)
   }
 
   get x() { return this.sprite.x; }
@@ -148,11 +149,11 @@ export default class Kart {
     } else {
       cap = onRoad ? TUNE.maxSpeed : (desert ? TUNE.desertOffRoadMax : TUNE.offRoadMax);
     }
-    cap *= this.speedMul;
+    cap *= this.speedMul * this.speedScale;
 
     if (braking) {
       // Brake to a stop, then back up slowly while still held.
-      this.speed = Math.max(-TUNE.reverseSpeed, this.speed - TUNE.brakeDecel * dt);
+      this.speed = Math.max(-TUNE.reverseSpeed * this.speedScale, this.speed - TUNE.brakeDecel * dt);
     } else {
       this.speed += TUNE.accel * dt;
     }

@@ -23,6 +23,13 @@ class BootScene extends Phaser.Scene {
       if (s === 'easy' || s === 'medium' || s === 'hard') saved = s;
     } catch (e) { /* ignore */ }
     this.registry.set('difficulty', saved);
+    // Seed the saved car-speed setting (defaults to medium).
+    let speed = 'medium';
+    try {
+      const sp = window.localStorage.getItem('kobikart.carSpeed');
+      if (sp === 'slow' || sp === 'medium' || sp === 'fast') speed = sp;
+    } catch (e) { /* ignore */ }
+    this.registry.set('carSpeed', speed);
     this.scene.start('TitleScene');
   }
 }

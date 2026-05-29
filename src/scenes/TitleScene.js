@@ -34,29 +34,35 @@ export default class TitleScene extends Phaser.Scene {
     this.addCruisingKarts(W, H);
 
     // Title.
-    this.titleText = this.add.text(W / 2, H * 0.22, 'KOBI KART', {
-      fontFamily: 'monospace', fontSize: '76px', color: '#ffe14d', fontStyle: 'bold',
+    this.titleText = this.add.text(W / 2, H * 0.18, 'KOBI KART', {
+      fontFamily: 'monospace', fontSize: '72px', color: '#ffe14d', fontStyle: 'bold',
       stroke: this.psychedelic ? '#5a1ea0' : '#c0392b', strokeThickness: 11,
     }).setOrigin(0.5).setDepth(20);
     this.tweens.add({ targets: this.titleText, scale: { from: 1, to: 1.05 }, duration: 950, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
 
-    this.add.text(W / 2, H * 0.345,
+    this.add.text(W / 2, H * 0.285,
       this.psychedelic ? '★ RAINBOW ROAD UNLOCKED ★  ·  5 races' : '4-track cup  ·  power-ups  ·  same keyboard', {
-        fontFamily: 'monospace', fontSize: '17px',
+        fontFamily: 'monospace', fontSize: '16px',
         color: this.psychedelic ? '#ffffff' : '#11364f', fontStyle: 'bold',
       }).setOrigin(0.5).setDepth(20);
 
-    this.makeButton(W / 2, H * 0.45, '1 PLAYER', 0xff4d4d, () => this.startGame(1));
-    this.makeButton(W / 2, H * 0.555, '2 PLAYERS', 0x4d8bff, () => this.startGame(2));
+    this.makeButton(W / 2, H * 0.385, '1 PLAYER', 0xff4d4d, () => this.startGame(1), { h: 48 });
+    this.makeButton(W / 2, H * 0.475, '2 PLAYERS', 0x4d8bff, () => this.startGame(2), { h: 48 });
+
+    this.makeSpeedSelector(W / 2, H * 0.575);
 
     const diff = (this.registry.get('difficulty') || 'medium').toUpperCase();
-    this.makeButton(W / 2, H * 0.655, `SETTINGS · AI ${diff}`, 0x9b6bce,
-      () => this.scene.start('SettingsScene'), { w: 320, h: 42, fontSize: 18 });
+    this.makeButton(W / 2, H * 0.665, `SETTINGS · AI ${diff}`, 0x9b6bce,
+      () => this.scene.start('SettingsScene'), { w: 320, h: 40, fontSize: 17 });
 
+    // Controls — one labelled line per player so every key is clear.
+    const ctrlStyle = { fontFamily: 'monospace', fontSize: '13px', color: '#ffffff' };
+    this.add.text(W / 2, H - 42,
+      'P1:  A/D steer · S brake · W boost · E or SPACE = use item        M = mute',
+      ctrlStyle).setOrigin(0.5).setDepth(20).setAlpha(0.9);
     this.add.text(W / 2, H - 22,
-      'P1: A/D · S · W · E/Space      P2: ←/→ · ↓ · ↑ · RShift or \\ //      M: mute',
-      { fontFamily: 'monospace', fontSize: '13px', color: '#ffffff' })
-      .setOrigin(0.5).setDepth(20).setAlpha(0.85);
+      'P2:  ←/→ steer · ↓ brake · ↑ boost · RIGHT-SHIFT, \\ or / = use item',
+      ctrlStyle).setOrigin(0.5).setDepth(20).setAlpha(0.9);
 
     addMuteButton(this);
 
@@ -213,6 +219,55 @@ export default class TitleScene extends Phaser.Scene {
     zone.on('pointerover', () => { draw(true); text.setScale(1.05); });
     zone.on('pointerout', () => { draw(false); text.setScale(1); });
     zone.on('pointerdown', onClick);
+  }
+
+  // Segmented Slow / Medium / Fast car-speed picker.
+  makeSpeedSelector(cx, y) {
+    this.add.text(cx, y - 30, 'CAR SPEED', {
+      fontFamily: 'monospace', fontSize: '14px', color: '#ffffff', fontStyle: 'bold',
+    }).setOrigin(0.5).setDepth(20);
+
+    const opts = [
+      { label: 'SLOW', key: 'slow', color: 0x57c75a },
+      { label: 'MEDIUM', key: 'medium', color: 0xffd23f },
+      { label: 'FAST', key: 'fast', color: 0xff4d4d },
+    ];
+    const bw = 120;
+    const bh = 38;
+    const gap = 10;
+    const total = opts.length * bw + (opts.length - 1) * gap;
+    const x0 = cx - total / 2 + bw / 2;
+
+    this.speedButtons = [];
+    opts.forEach((o, i) => {
+      const x = x0 + i * (bw + gap);
+      const g = this.add.graphics().setDepth(20);
+      const text = this.add.text(x, y, o.label, {
+        fontFamily: 'monospace', fontSize: '18px', color: '#ffffff', fontStyle: 'bold',
+      }).setOrigin(0.5).setDepth(21);
+      this.speedButtons.push({ x, y, bw, bh, g, key: o.key, color: o.color });
+      this.add.zone(x, y, bw, bh).setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => this.selectSpeed(o.key));
+    });
+    this.drawSpeedButtons();
+  }
+
+  drawSpeedButtons() {
+    const cur = this.registry.get('carSpeed') || 'medium';
+    this.speedButtons.forEach((b) => {
+      const sel = b.key === cur;
+      b.g.clear();
+      b.g.fillStyle(0x000000, 0.3); b.g.fillRoundedRect(b.x - b.bw / 2 + 3, b.y - b.bh / 2 + 3, b.bw, b.bh, 10);
+      b.g.fillStyle(b.color, sel ? 1 : 0.32); b.g.fillRoundedRect(b.x - b.bw / 2, b.y - b.bh / 2, b.bw, b.bh, 10);
+      b.g.lineStyle(sel ? 4 : 2, 0xffffff, sel ? 1 : 0.5); b.g.strokeRoundedRect(b.x - b.bw / 2, b.y - b.bh / 2, b.bw, b.bh, 10);
+    });
+  }
+
+  selectSpeed(key) {
+    if ((this.registry.get('carSpeed') || 'medium') !== key) Audio.sfx('pickup');
+    this.registry.set('carSpeed', key);
+    try { window.localStorage.setItem('kobikart.carSpeed', key); } catch (e) { /* ignore */ }
+    this.drawSpeedButtons();
   }
 
   startGame(count) {

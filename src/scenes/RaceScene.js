@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import Kart, { TUNE } from '../Kart.js';
 import { generateTrack } from '../TrackGenerator.js';
 import { THEME_PROPS } from '../Props.js';
-import { ROSTER, POINTS, LAPS, AI_DIFFICULTY } from '../GrandPrix.js';
+import { ROSTER, POINTS, LAPS, AI_DIFFICULTY, CAR_SPEEDS } from '../GrandPrix.js';
 import { makeKartTexture, makeGameTextures } from '../textures.js';
 import * as Audio from '../Audio.js';
 
@@ -47,6 +47,7 @@ export default class RaceScene extends Phaser.Scene {
   create() {
     this.gp = this.registry.get('gp');
     this.aiCfg = AI_DIFFICULTY[this.gp.difficulty] || AI_DIFFICULTY.medium;
+    this.carSpeed = CAR_SPEEDS[this.registry.get('carSpeed')] || 1;
     const themeName = this.gp.themeOrder[this.gp.raceIndex];
 
     const track = generateTrack(WORLD_W, WORLD_H, themeName);
@@ -146,6 +147,7 @@ export default class RaceScene extends Phaser.Scene {
       kart.name = r.name;
       kart.color = r.color;
       kart.isAI = this.gp.debugAllAI || i >= this.gp.playerCount;
+      kart.speedScale = this.carSpeed; // slow/medium/fast applies to everyone
       kart.idxPos = idx;
       kart.halfway = false;
       this.racers.push(kart);

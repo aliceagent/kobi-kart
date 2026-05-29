@@ -34,6 +34,15 @@ export default class UIScene extends Phaser.Scene {
     this.p1Text = this.add.text(16, 12, '', style).setDepth(11);
     this.p2Text = this.add.text(W - 16, 12, '', style).setOrigin(1, 0).setDepth(11);
 
+    // "Use item" key reminder under each player's item box.
+    const hintStyle = { fontFamily: 'monospace', fontSize: '11px', color: '#ffe08a' };
+    if (this.race && this.race.humans && this.race.humans[0]) {
+      this.add.text(16, 99, 'item: E / Space', hintStyle).setDepth(11);
+    }
+    if (this.race && this.race.humans && this.race.humans[1]) {
+      this.add.text(W - 16, 99, 'item: R-Shift \\ /', hintStyle).setOrigin(1, 0).setDepth(11);
+    }
+
     this.stragglerText = this.add.text(W / 2, 40, '', {
       fontFamily: 'monospace', fontSize: '15px', color: '#ffe14d', fontStyle: 'bold',
     }).setOrigin(0.5, 0).setDepth(11);
