@@ -107,6 +107,18 @@ export default class RaceScene extends Phaser.Scene {
       this.scene.stop('UIScene');
       Audio.stopMusic();
     });
+
+    // Pause (P). While paused, the race update is frozen but key listeners
+    // still fire, so you can resume (P) or quit to the menu (Q / Esc).
+    this.paused = false;
+    this.input.keyboard.on('keydown-P', () => { if (this.state !== 'finished') this.togglePause(); });
+    this.input.keyboard.on('keydown-Q', () => { if (this.paused) this.scene.start('TitleScene'); });
+    this.input.keyboard.on('keydown-ESC', () => { if (this.paused) this.scene.start('TitleScene'); });
+  }
+
+  togglePause() {
+    this.paused = !this.paused;
+    Audio.sfx('beep');
   }
 
   // ---------------------------------------------------------------- setup ----
@@ -670,6 +682,7 @@ export default class RaceScene extends Phaser.Scene {
 
   // ----------------------------------------------------------- update --------
   update(time, deltaMs) {
+    if (this.paused) return; // frozen until P resumes
     const dt = Math.min(deltaMs, 50) / 1000;
     this.elapsed += dt;
 

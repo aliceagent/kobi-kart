@@ -56,6 +56,19 @@ export default class UIScene extends Phaser.Scene {
       stroke: '#000000', strokeThickness: 4,
     }).setOrigin(0.5, 0).setDepth(11);
 
+    // Pause overlay (shown when the race is paused).
+    const H = this.scale.height;
+    this.pauseDim = this.add.graphics().setDepth(30).setVisible(false);
+    this.pauseDim.fillStyle(0x000000, 0.6); this.pauseDim.fillRect(0, 0, W, H);
+    this.pauseTitle = this.add.text(W / 2, H / 2 - 30, 'PAUSED', {
+      fontFamily: 'monospace', fontSize: '64px', color: '#ffe14d', fontStyle: 'bold',
+      stroke: '#000000', strokeThickness: 8,
+    }).setOrigin(0.5).setDepth(31).setVisible(false);
+    this.pauseHint = this.add.text(W / 2, H / 2 + 34, 'P — resume     ·     Q / Esc — quit to menu', {
+      fontFamily: 'monospace', fontSize: '17px', color: '#ffffff', fontStyle: 'bold',
+      stroke: '#000000', strokeThickness: 4,
+    }).setOrigin(0.5).setDepth(31).setVisible(false);
+
     addMuteButton(this);
   }
 
@@ -117,6 +130,10 @@ export default class UIScene extends Phaser.Scene {
   update() {
     const race = this.race;
     if (!race || !race.scene || !race.racers) return;
+    const paused = !!race.paused;
+    this.pauseDim.setVisible(paused);
+    this.pauseTitle.setVisible(paused);
+    this.pauseHint.setVisible(paused);
     this.gfx.clear();
     const W = this.scale.width;
 

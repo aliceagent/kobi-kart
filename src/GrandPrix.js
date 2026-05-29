@@ -12,7 +12,7 @@ export const POINTS = [10, 6, 3, 1]; // awarded for 1st..4th each race
 export const LAPS = 3; // laps per race
 
 // Overall car-speed setting: slow is 20% slower, fast is 10% faster than medium.
-export const CAR_SPEEDS = { slow: 0.8, medium: 1.0, fast: 1.1 };
+export const CAR_SPEEDS = { slow: 0.72, medium: 1.0, fast: 1.1 };
 export const ALL_THEMES = ['Grassy', 'Beach', 'Ice', 'Candy'];
 
 function shuffle(arr) {
