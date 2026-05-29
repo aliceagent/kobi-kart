@@ -52,8 +52,10 @@ export default class TitleScene extends Phaser.Scene {
     this.makeSpeedSelector(W / 2, H * 0.595);
 
     const diff = (this.registry.get('difficulty') || 'medium').toUpperCase();
-    this.makeButton(W / 2, H * 0.688, `SETTINGS · AI ${diff}`, 0x9b6bce,
-      () => this.scene.start('SettingsScene'), { w: 320, h: 40, fontSize: 17 });
+    this.makeButton(W / 2 - 162, H * 0.688, 'HOW TO PLAY', 0x2fa86a,
+      () => this.scene.start('TutorialScene'), { w: 300, h: 40, fontSize: 18 });
+    this.makeButton(W / 2 + 162, H * 0.688, `SETTINGS · AI ${diff}`, 0x9b6bce,
+      () => this.scene.start('SettingsScene'), { w: 300, h: 40, fontSize: 16 });
 
     // Controls — one labelled line per player so every key is clear. A dark
     // strip + outline keeps them readable over the grass.
@@ -76,6 +78,7 @@ export default class TitleScene extends Phaser.Scene {
     this.input.keyboard.once('keydown-ONE', () => this.startGame(1));
     this.input.keyboard.once('keydown-TWO', () => this.startGame(2));
     this.input.keyboard.once('keydown-S', () => this.scene.start('SettingsScene'));
+    this.input.keyboard.once('keydown-H', () => this.scene.start('TutorialScene'));
     this.setupKonami();
 
     // Menu music (funky once Rainbow Road is unlocked). Audio unlocks on the

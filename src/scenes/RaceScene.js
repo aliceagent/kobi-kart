@@ -154,25 +154,21 @@ export default class RaceScene extends Phaser.Scene {
       if (!kart.isAI) this.humans.push(kart);
     });
 
-    // Human control keys.
+    // Human control keys. Both sets are always created; in 1-player mode the
+    // single human can drive with EITHER P1 (WASD) or P2 (arrows) controls.
+    this.soloDualInput = this.gp.playerCount === 1;
     const KC = Phaser.Input.Keyboard.KeyCodes;
-    if (this.humans[0]) {
-      this.keysP1 = this.input.keyboard.addKeys({
-        left: KC.A, right: KC.D, brake: KC.S, boost: KC.W,
-      });
-      // P1 launches an item with E or Space.
-      this.p1ItemKeys = [this.input.keyboard.addKey(KC.E), this.input.keyboard.addKey(KC.SPACE)];
-    }
-    if (this.humans[1]) {
-      this.keysP2 = this.input.keyboard.addKeys({
-        left: KC.LEFT, right: KC.RIGHT, brake: KC.DOWN, boost: KC.UP,
-      });
-      // P2 launches an item with \ or / ...
-      this.p2ItemKeys = [this.input.keyboard.addKey(KC.BACK_SLASH), this.input.keyboard.addKey(KC.FORWARD_SLASH)];
-      // ...or the RIGHT Shift specifically (edge-triggered via the DOM event).
-      this.p2RightShiftFired = false;
-      this.input.keyboard.on('keydown-SHIFT', (e) => { if (e.location === 2) this.p2RightShiftFired = true; });
-    }
+    this.keysP1 = this.input.keyboard.addKeys({
+      left: KC.A, right: KC.D, brake: KC.S, boost: KC.W,
+    });
+    this.p1ItemKeys = [this.input.keyboard.addKey(KC.E), this.input.keyboard.addKey(KC.SPACE)];
+    this.keysP2 = this.input.keyboard.addKeys({
+      left: KC.LEFT, right: KC.RIGHT, brake: KC.DOWN, boost: KC.UP,
+    });
+    this.p2ItemKeys = [this.input.keyboard.addKey(KC.BACK_SLASH), this.input.keyboard.addKey(KC.FORWARD_SLASH)];
+    // Right Shift (item) is matched specifically via the DOM event location.
+    this.p2RightShiftFired = false;
+    this.input.keyboard.on('keydown-SHIFT', (e) => { if (e.location === 2) this.p2RightShiftFired = true; });
   }
 
   createItemBoxes() {
@@ -783,7 +779,19 @@ export default class RaceScene extends Phaser.Scene {
       input = this.aiControl(kart);
     } else if (kart === this.humans[0]) {
       input = this.readKeys(this.keysP1);
-      if (this.p1ItemKeys.some((k) => Phaser.Input.Keyboard.JustDown(k))) this.useItem(kart);
+      let fire = this.p1ItemKeys.some((k) => Phaser.Input.Keyboard.JustDown(k));
+      if (this.soloDualInput) {
+        // Solo player may use either control set — merge them.
+        const in2 = this.readKeys(this.keysP2);
+        input = {
+          steer: Phaser.Math.Clamp(input.steer + in2.steer, -1, 1),
+          braking: input.braking || in2.braking,
+          boosting: input.boosting || in2.boosting,
+        };
+        if (this.p2ItemKeys.some((k) => Phaser.Input.Keyboard.JustDown(k))) fire = true;
+        if (this.p2RightShiftFired) { fire = true; this.p2RightShiftFired = false; }
+      }
+      if (fire) this.useItem(kart);
     } else {
       input = this.readKeys(this.keysP2);
       let fire = this.p2ItemKeys.some((k) => Phaser.Input.Keyboard.JustDown(k));
