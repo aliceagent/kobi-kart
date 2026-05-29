@@ -236,6 +236,31 @@ export default class RaceScene extends Phaser.Scene {
   // small forward steps (ignores backward motion and off-track index jumps),
   // and require passing the track midpoint before a finish-line crossing
   // counts as a lap.
+  // If a racer is wedged off the track (e.g. jammed into a V of guard rails)
+  // and barely moving for a couple seconds, pop them back onto the racing line.
+  rescueIfStuck(kart, dt) {
+    if (kart.finished) { kart.stuckTimer = 0; return; }
+    if (Math.abs(kart.speed) < 45 && !this.isOnRoad(kart.x, kart.y)) {
+      kart.stuckTimer += dt;
+      if (kart.stuckTimer > 2.5) {
+        const n = this.centerline.length;
+        const idx = this.nearestIndex(kart.x, kart.y);
+        const p = this.centerline[idx];
+        const pn = this.centerline[(idx + 1) % n];
+        kart.x = p.x;
+        kart.y = p.y;
+        kart.heading = Math.atan2(pn.y - p.y, pn.x - p.x);
+        kart.speed = 80;
+        kart.knockX = 0;
+        kart.knockY = 0;
+        kart.stuckTimer = 0;
+        this.burst(p.x, p.y, 0xffffff);
+      }
+    } else {
+      kart.stuckTimer = Math.max(0, kart.stuckTimer - dt * 2);
+    }
+  }
+
   updateProgress(kart) {
     if (kart.finished) return;
     const n = this.centerline.length;
@@ -610,6 +635,7 @@ export default class RaceScene extends Phaser.Scene {
     }
     this.racers.forEach((r) => { this.resolveRails(r, dt); this.resolveObstacles(r); this.clampToWorld(r); });
 
+    this.racers.forEach((r) => this.rescueIfStuck(r, dt));
     this.racers.forEach((r) => this.updateProgress(r));
     this.updateItemBoxes(dt);
     this.updateProjectiles(dt);

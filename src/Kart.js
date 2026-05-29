@@ -11,6 +11,7 @@ export const TUNE = {
   accel: 260,
   brakeDecel: 440,
   overspeedDecel: 650,
+  reverseSpeed: 120, // slow reverse when the brake is held at a standstill
   turnRate: 3.2,
   driftTurnRate: 4.3,
   minTurnSpeed: 120,
@@ -48,6 +49,7 @@ export default class Kart {
     this.shieldTimer = 0;
     this.itemBoostTimer = 0;
     this.heldItem = null;
+    this.stuckTimer = 0; // time spent wedged off-track (for auto-rescue)
 
     // Race progress (nearest-centerline-index based).
     this.prevX = x;
@@ -128,14 +130,18 @@ export default class Kart {
     else cap = onRoad ? TUNE.maxSpeed : TUNE.offRoadMax;
     cap *= this.speedMul;
 
-    if (braking) this.speed -= TUNE.brakeDecel * dt;
-    else this.speed += TUNE.accel * dt;
+    if (braking) {
+      // Brake to a stop, then back up slowly while still held.
+      this.speed = Math.max(-TUNE.reverseSpeed, this.speed - TUNE.brakeDecel * dt);
+    } else {
+      this.speed += TUNE.accel * dt;
+    }
     if (this.speed > cap) this.speed = Math.max(cap, this.speed - TUNE.overspeedDecel * dt);
-    if (this.speed < 0) this.speed = 0;
 
+    // Steering works forwards and in reverse (use speed magnitude).
     const turnFactor = Math.max(
       TUNE.minTurnFactor,
-      Phaser.Math.Clamp(this.speed / TUNE.minTurnSpeed, 0, 1)
+      Phaser.Math.Clamp(Math.abs(this.speed) / TUNE.minTurnSpeed, 0, 1)
     );
     const turnRate = braking ? TUNE.driftTurnRate : TUNE.turnRate;
     this.heading += steer * turnRate * turnFactor * dt;
