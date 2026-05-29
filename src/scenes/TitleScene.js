@@ -46,13 +46,13 @@ export default class TitleScene extends Phaser.Scene {
         color: this.psychedelic ? '#ffffff' : '#11364f', fontStyle: 'bold',
       }).setOrigin(0.5).setDepth(20);
 
-    this.makeButton(W / 2, H * 0.385, '1 PLAYER', 0xff4d4d, () => this.startGame(1), { h: 48 });
-    this.makeButton(W / 2, H * 0.475, '2 PLAYERS', 0x4d8bff, () => this.startGame(2), { h: 48 });
+    this.makeButton(W / 2, H * 0.36, '1 PLAYER', 0xff4d4d, () => this.startGame(1), { h: 48 });
+    this.makeButton(W / 2, H * 0.455, '2 PLAYERS', 0x4d8bff, () => this.startGame(2), { h: 48 });
 
-    this.makeSpeedSelector(W / 2, H * 0.575);
+    this.makeSpeedSelector(W / 2, H * 0.595);
 
     const diff = (this.registry.get('difficulty') || 'medium').toUpperCase();
-    this.makeButton(W / 2, H * 0.665, `SETTINGS · AI ${diff}`, 0x9b6bce,
+    this.makeButton(W / 2, H * 0.688, `SETTINGS · AI ${diff}`, 0x9b6bce,
       () => this.scene.start('SettingsScene'), { w: 320, h: 40, fontSize: 17 });
 
     // Controls — one labelled line per player so every key is clear.

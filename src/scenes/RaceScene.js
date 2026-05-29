@@ -179,8 +179,12 @@ export default class RaceScene extends Phaser.Scene {
     const n = this.centerline.length;
     this.itemBoxes = [];
     const count = 18;
+    // Keep a clear zone around the start line (idx 0) so no boxes sit on the
+    // starting grid or right in front of the cars at GO.
+    const gap = Math.max(12, Math.round(n * 0.08));
+    const span = n - 2 * gap;
     for (let i = 0; i < count; i += 1) {
-      const idx = Math.round(((i + 0.5) * n) / count) % n;
+      const idx = Math.round(gap + ((i + 0.5) * span) / count) % n;
       const p = this.centerline[idx];
       const sprite = this.add.image(p.x, p.y, 'itembox').setDepth(8);
       this.itemBoxes.push({ x: p.x, y: p.y, sprite, active: true, timer: 0 });
