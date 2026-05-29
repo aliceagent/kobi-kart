@@ -78,9 +78,10 @@ export function makeGameTextures(scene) {
     g.destroy();
   }
 
-  // Projectile turtle shells (green = straight, red = homing).
+  // Projectile turtle shells (green = straight, red = homing, blue = leader-seeking).
   makeShell(scene, 'shell_green', 0x3ecf5a, 0x1f8f3f, 0x14662b, 0x9bf0a6);
   makeShell(scene, 'shell_red', 0xff5a5a, 0xc0392b, 0x8e1f1f, 0xffc2c2);
+  makeShell(scene, 'shell_blue', 0x4d8bff, 0x1e46b0, 0x122e6e, 0xbcd4ff);
 
   // Trap: an oil slick.
   if (!scene.textures.exists('oil')) {

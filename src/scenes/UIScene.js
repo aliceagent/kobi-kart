@@ -72,10 +72,10 @@ export default class UIScene extends Phaser.Scene {
       g.fillStyle(0xffd23f, 1);
       g.fillTriangle(cx - 10, cy - 8, cx - 10, cy + 8, cx - 1, cy);
       g.fillTriangle(cx - 1, cy - 8, cx - 1, cy + 8, cx + 8, cy);
-    } else if (item === 'greenShell' || item === 'redShell') {
-      const base = item === 'redShell' ? 0xff5a5a : 0x3ecf5a;
-      const rim = item === 'redShell' ? 0xc0392b : 0x1f8f3f;
-      const dark = item === 'redShell' ? 0x8e1f1f : 0x14662b;
+    } else if (item === 'greenShell' || item === 'redShell' || item === 'blueShell') {
+      let base = 0x3ecf5a; let rim = 0x1f8f3f; let dark = 0x14662b;
+      if (item === 'redShell') { base = 0xff5a5a; rim = 0xc0392b; dark = 0x8e1f1f; }
+      else if (item === 'blueShell') { base = 0x4d8bff; rim = 0x1e46b0; dark = 0x122e6e; }
       g.fillStyle(0x16161c, 1); g.fillCircle(cx, cy, 12);
       g.fillStyle(rim, 1); g.fillCircle(cx, cy, 10.5);
       g.fillStyle(base, 1); g.fillCircle(cx, cy, 8);

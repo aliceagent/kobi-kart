@@ -288,6 +288,8 @@ export default class RaceScene extends Phaser.Scene {
   // ------------------------------------------------------------- items -------
   giveItem(kart) {
     const place = Phaser.Math.Clamp(kart.livePlace || 1, 1, 4);
+    // Last place has a 1-in-10 shot at the dreaded blue (leader-seeking) shell.
+    if (place === 4 && Math.random() < 0.1) { kart.heldItem = 'blueShell'; return; }
     const weights = ITEM_WEIGHTS[place];
     let total = 0;
     for (const k in weights) total += weights[k];
@@ -304,23 +306,31 @@ export default class RaceScene extends Phaser.Scene {
     Audio.sfx('item');
     if (item === 'boost') { kart.itemBoostTimer = 1.6; Audio.sfx('boost'); this.burst(kart.x, kart.y, 0xffd23f); }
     else if (item === 'shield') { kart.shieldTimer = 6; }
-    else if (item === 'greenShell') this.spawnProjectile(kart, false);
-    else if (item === 'redShell') this.spawnProjectile(kart, true);
+    else if (item === 'greenShell') this.spawnProjectile(kart, 'green');
+    else if (item === 'redShell') this.spawnProjectile(kart, 'red');
+    else if (item === 'blueShell') this.spawnProjectile(kart, 'blue');
     else if (item === 'trap') this.spawnTrap(kart);
   }
 
-  spawnProjectile(kart, homing) {
+  // type: 'green' (straight), 'red' (homing), 'blue' (leader-seeking).
+  spawnProjectile(kart, type) {
     const ox = Math.cos(kart.heading);
     const oy = Math.sin(kart.heading);
-    const key = homing ? 'shell_red' : 'shell_green';
+    const homing = type !== 'green';
+    const blue = type === 'blue';
+    const key = `shell_${type}`;
     const sprite = this.add.image(kart.x + ox * 28, kart.y + oy * 28, key).setDepth(13);
-    const speed = homing ? 430 : 480 + kart.speed;
+
+    let speed; let turnRate; let life;
+    if (type === 'green') { speed = 480 + kart.speed; turnRate = 0; life = 3; }
+    else if (type === 'red') { speed = 430; turnRate = 3.8; life = 5; }
+    else { speed = 473; turnRate = 4.6; life = 11; } // blue: 10% faster, tighter turns, long reach
+
     this.projectiles.push({
       sprite, x: sprite.x, y: sprite.y,
       vx: ox * speed, vy: oy * speed, speed,
-      owner: kart, homing,
-      turnRate: 3.8, // enough to follow the racing line through corners
-      life: homing ? 5 : 3,
+      owner: kart, homing, blue, turnRate, life,
+      hitSet: new Set(), // racers a blue shell has already spun out (passes through them)
     });
   }
 
@@ -379,7 +389,23 @@ export default class RaceScene extends Phaser.Scene {
       if (!dead) {
         for (const r of this.racers) {
           if (r === p.owner || r.finished) continue;
-          if ((r.x - p.x) ** 2 + (r.y - p.y) ** 2 < (r.radius + 11) ** 2) {
+          if ((r.x - p.x) ** 2 + (r.y - p.y) ** 2 >= (r.radius + 11) ** 2) continue;
+          if (p.blue) {
+            if (r.livePlace === 1) {
+              // Reached the leader — spin them out and detonate.
+              const landed = r.hit();
+              this.burst(p.x, p.y, landed ? 0x4d8bff : 0x9fd6f5);
+              Audio.sfx('hit');
+              dead = true;
+              break;
+            } else if (!p.hitSet.has(r.id)) {
+              // A bystander in the path — spin them once, then keep going.
+              r.hit();
+              p.hitSet.add(r.id);
+              this.burst(r.x, r.y, 0x9fd6f5);
+              Audio.sfx('bump');
+            }
+          } else {
             const landed = r.hit();
             this.burst(p.x, p.y, landed ? 0x33c75a : 0x9fd6f5);
             Audio.sfx('hit');
@@ -388,8 +414,9 @@ export default class RaceScene extends Phaser.Scene {
           }
         }
       }
-      // Shells shatter when they hit a wall (guard rail) or a solid prop.
-      if (!dead && this.hitsEnvironment(p.x, p.y, 9)) {
+      // Green/red shells shatter on walls and solid props. Blue shells are
+      // relentless — they plough through everything on the way to the leader.
+      if (!dead && !p.blue && this.hitsEnvironment(p.x, p.y, 9)) {
         this.burst(p.x, p.y, p.homing ? 0xff8a8a : 0x9bf0a6);
         Audio.sfx('bump');
         dead = true;
