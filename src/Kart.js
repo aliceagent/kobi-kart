@@ -7,6 +7,7 @@ export const TUNE = {
   itemBoostSpeed: 560, // power-up boost (stronger than the meter boost)
   offRoadMax: 130,
   offRoadBoostSpeed: 230,
+  itemBoostOffRoadSpeed: 470, // power-up boost shrugs off rough terrain (faster than normal on-road)
   accel: 260,
   brakeDecel: 440,
   overspeedDecel: 650,
@@ -122,7 +123,7 @@ export default class Kart {
     }
 
     let cap;
-    if (this.itemBoostTimer > 0) cap = onRoad ? TUNE.itemBoostSpeed : TUNE.offRoadBoostSpeed + 80;
+    if (this.itemBoostTimer > 0) cap = onRoad ? TUNE.itemBoostSpeed : TUNE.itemBoostOffRoadSpeed;
     else if (this.boosting) cap = onRoad ? TUNE.boostSpeed : TUNE.offRoadBoostSpeed;
     else cap = onRoad ? TUNE.maxSpeed : TUNE.offRoadMax;
     cap *= this.speedMul;
