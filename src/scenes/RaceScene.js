@@ -53,9 +53,11 @@ export default class RaceScene extends Phaser.Scene {
     this.centerline = track.centerline;
     this.roadWidth = track.roadWidth;
     this.halfWidth = track.halfWidth;
-    this.rails = track.rails;
     this.theme = track.theme;
     this.start = track.start;
+    this.isRainbow = this.theme.name === 'Rainbow';
+    // Rainbow Road floats in space — no guard rails (you fall off instead).
+    this.rails = this.isRainbow ? [] : track.rails;
 
     makeGameTextures(this);
     ROSTER.forEach((r) => makeKartTexture(this, `kart_${r.id}`, r.color, r.trim));
@@ -96,7 +98,7 @@ export default class RaceScene extends Phaser.Scene {
     this.order = this.racers.slice();
 
     Audio.resumeAudio();
-    Audio.startMusic(this.theme.name);
+    Audio.startMusic(this.isRainbow ? 'Funky' : this.theme.name);
 
     // HUD overlay scene (isolated from the world camera's zoom).
     this.scene.launch('UIScene', { race: this });
@@ -247,7 +249,8 @@ export default class RaceScene extends Phaser.Scene {
   // If a racer is wedged off the track (e.g. jammed into a V of guard rails)
   // and barely moving for a couple seconds, pop them back onto the racing line.
   rescueIfStuck(kart, dt) {
-    if (kart.finished) { kart.stuckTimer = 0; return; }
+    if (kart.finished || kart.falling) { kart.stuckTimer = 0; return; }
+    if (this.isRainbow) return; // Rainbow Road handles off-track via falling
     if (Math.abs(kart.speed) < 45 && !this.isOnRoad(kart.x, kart.y)) {
       kart.stuckTimer += dt;
       if (kart.stuckTimer > 2.5) {
@@ -654,11 +657,13 @@ export default class RaceScene extends Phaser.Scene {
 
     this.raceElapsed += dt;
     this.applyRubberBand();
+    if (this.isRainbow) this.racers.forEach((r) => this.updateFall(r, dt));
     this.racers.forEach((r) => this.driveRacer(r, dt, false));
 
-    // Collisions among all racers.
+    // Collisions among all racers (falling karts are intangible).
     for (let i = 0; i < this.racers.length; i += 1) {
       for (let j = i + 1; j < this.racers.length; j += 1) {
+        if (this.racers[i].falling || this.racers[j].falling) continue;
         this.resolveKartCollision(this.racers[i], this.racers[j]);
       }
     }
@@ -685,7 +690,49 @@ export default class RaceScene extends Phaser.Scene {
     this.drawDynamic();
   }
 
+  // Rainbow Road: leaving the track means tumbling into space, then respawning
+  // back on the road where you fell off.
+  updateFall(kart, dt) {
+    if (kart.finished) return;
+    if (kart.falling) {
+      kart.fallTimer -= dt;
+      const t = Phaser.Math.Clamp(kart.fallTimer / 0.9, 0, 1);
+      kart.sprite.setScale(Math.max(0.05, t)); // shrink as it falls away
+      kart.sprite.rotation += dt * 14; // tumble
+      kart.speed = 0;
+      kart.vx = 0;
+      kart.vy = 0;
+      if (kart.fallTimer <= 0) {
+        const r = kart.respawn;
+        kart.x = r.x;
+        kart.y = r.y;
+        kart.heading = r.heading;
+        kart.speed = 70;
+        kart.knockX = 0;
+        kart.knockY = 0;
+        kart.falling = false;
+        kart.sprite.setScale(1);
+        kart.sprite.rotation = r.heading;
+        this.burst(r.x, r.y, 0xffffff);
+      }
+      return;
+    }
+    if (!this.isOnRoad(kart.x, kart.y)) {
+      // Fell off — start the tumble, and remember where to drop back in.
+      const n = this.centerline.length;
+      const idx = this.nearestIndex(kart.x, kart.y);
+      const p = this.centerline[idx];
+      const pn = this.centerline[(idx + 1) % n];
+      kart.respawn = { x: p.x, y: p.y, heading: Math.atan2(pn.y - p.y, pn.x - p.x) };
+      kart.falling = true;
+      kart.fallTimer = 0.9;
+      kart.speed = 0;
+      if (!kart.isAI) Audio.sfx('hit');
+    }
+  }
+
   driveRacer(kart, dt, finishedMode) {
+    if (kart.falling) return; // tumbling through space — no control
     let input;
     if (kart.isAI || kart.finished || finishedMode) {
       input = this.aiControl(kart);
@@ -741,12 +788,59 @@ export default class RaceScene extends Phaser.Scene {
     g.setDepth(0);
     g.fillStyle(t.terrain, 1);
     g.fillRect(0, 0, WORLD_W, WORLD_H);
+
+    if (this.isRainbow) {
+      this.obstacles = []; // space: nothing to bump into off-track
+      this.drawStarfield(g);
+      this.drawRainbowRoad(g);
+      this.drawStartLine(g);
+      return g;
+    }
+
     this.drawThickLoop(g, this.centerline, this.roadWidth + 12, t.edge);
     this.drawThickLoop(g, this.centerline, this.roadWidth, t.road);
     this.drawStartLine(g);
     this.drawRails(g);
     this.placeProps(g);
     return g;
+  }
+
+  drawStarfield(g) {
+    // Deterministic-ish scatter of stars across the void.
+    let seed = 1337;
+    const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+    for (let i = 0; i < 320; i += 1) {
+      const x = rnd() * WORLD_W;
+      const y = rnd() * WORLD_H;
+      const r = rnd() * 1.8 + 0.6;
+      const b = 0.5 + rnd() * 0.5;
+      const tint = rnd() < 0.15 ? 0x9fd6f5 : (rnd() < 0.15 ? 0xffd9a0 : 0xffffff);
+      g.fillStyle(tint, b);
+      g.fillCircle(x, y, r);
+    }
+  }
+
+  drawRainbowRoad(g) {
+    const pts = this.centerline;
+    const n = pts.length;
+    const w = this.roadWidth;
+    // Soft white glow under the road.
+    this.drawThickLoop(g, pts, w + 16, 0xffffff);
+    g.fillStyle(0xffffff, 1);
+    // Rainbow body: hue cycles a few times around the loop.
+    for (let i = 0; i < n; i += 1) {
+      const a = pts[i];
+      const b = pts[(i + 1) % n];
+      const hue = ((i / n) * 3) % 1; // 3 full rainbow cycles around the lap
+      const col = Phaser.Display.Color.HSVToRGB(hue, 0.85, 1).color;
+      g.lineStyle(w, col, 1);
+      g.beginPath();
+      g.moveTo(a.x, a.y);
+      g.lineTo(b.x, b.y);
+      g.strokePath();
+      g.fillStyle(col, 1);
+      g.fillCircle(a.x, a.y, w / 2); // fill the joins so the band is continuous
+    }
   }
 
   drawThickLoop(g, pts, width, color) {

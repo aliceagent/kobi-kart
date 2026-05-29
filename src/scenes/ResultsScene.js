@@ -16,7 +16,8 @@ export default class ResultsScene extends Phaser.Scene {
     const H = this.scale.height;
     this.gp = this.registry.get('gp');
     const results = this.gp.lastResults || [];
-    const isLast = this.gp.raceIndex >= 3;
+    const totalRaces = this.gp.themeOrder.length;
+    const isLast = this.gp.raceIndex >= totalRaces - 1;
     const themeName = (this.gp.themeOrder[this.gp.raceIndex] || '').toUpperCase();
 
     // Backdrop.
@@ -34,7 +35,7 @@ export default class ResultsScene extends Phaser.Scene {
       tint: [0xff5d8f, 0x4d8bff, 0xffd23f, 0x57c75a, 0xb06bff, 0xffffff],
     }).setDepth(1);
 
-    this.add.text(W / 2, 30, `RACE ${this.gp.raceIndex + 1} / 4 RESULTS`, {
+    this.add.text(W / 2, 30, `RACE ${this.gp.raceIndex + 1} / ${totalRaces} RESULTS`, {
       fontFamily: 'monospace', fontSize: '30px', color: '#ffe14d', fontStyle: 'bold',
       stroke: '#7a3bbf', strokeThickness: 5,
     }).setOrigin(0.5).setDepth(5);

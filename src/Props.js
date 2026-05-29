@@ -393,4 +393,5 @@ export const THEME_PROPS = {
   Beach: [palm, umbrella, crab, starfish, shell],
   Ice: [snowman, pine, iceCrystal, penguin, snowPatch],
   Candy: [lollipop, peppermint, gumdrop, iceCream, sprinkles],
+  Rainbow: [], // outer space — nothing off-track but the void
 };

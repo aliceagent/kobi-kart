@@ -3,27 +3,48 @@ import { initGrandPrix, ROSTER } from '../GrandPrix.js';
 import * as Audio from '../Audio.js';
 import { addMuteButton } from '../ui.js';
 
+const KONAMI = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'KeyB', 'KeyA'];
+
+function hueHex(h) {
+  const c = Phaser.Display.Color.HSVToRGB(((h % 1) + 1) % 1, 0.9, 1).color;
+  return `#${c.toString(16).padStart(6, '0')}`;
+}
+
 export default class TitleScene extends Phaser.Scene {
   constructor() {
     super('TitleScene');
   }
 
+  init(data) {
+    this.justUnlocked = !!(data && data.justUnlocked);
+  }
+
   create() {
     const W = this.scale.width;
     const H = this.scale.height;
+    this.psychedelic = !!this.registry.get('rainbow');
+    this.psyPhase = 0;
+    this.karts = [];
 
-    this.drawScenery(W, H);
+    if (this.psychedelic) {
+      this.psyGfx = this.add.graphics().setDepth(0); // animated in update()
+    } else {
+      this.drawScenery(W, H);
+    }
+    this.addCruisingKarts(W, H);
 
     // Title.
-    const title = this.add.text(W / 2, H * 0.22, 'KOBI KART', {
+    this.titleText = this.add.text(W / 2, H * 0.22, 'KOBI KART', {
       fontFamily: 'monospace', fontSize: '76px', color: '#ffe14d', fontStyle: 'bold',
-      stroke: '#c0392b', strokeThickness: 11,
+      stroke: this.psychedelic ? '#5a1ea0' : '#c0392b', strokeThickness: 11,
     }).setOrigin(0.5).setDepth(20);
-    this.tweens.add({ targets: title, scale: { from: 1, to: 1.05 }, duration: 950, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+    this.tweens.add({ targets: this.titleText, scale: { from: 1, to: 1.05 }, duration: 950, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
 
-    this.add.text(W / 2, H * 0.345, '4-track cup  ·  power-ups  ·  same keyboard', {
-      fontFamily: 'monospace', fontSize: '17px', color: '#11364f', fontStyle: 'bold',
-    }).setOrigin(0.5).setDepth(20);
+    this.add.text(W / 2, H * 0.345,
+      this.psychedelic ? '★ RAINBOW ROAD UNLOCKED ★  ·  5 races' : '4-track cup  ·  power-ups  ·  same keyboard', {
+        fontFamily: 'monospace', fontSize: '17px',
+        color: this.psychedelic ? '#ffffff' : '#11364f', fontStyle: 'bold',
+      }).setOrigin(0.5).setDepth(20);
 
     this.makeButton(W / 2, H * 0.45, '1 PLAYER', 0xff4d4d, () => this.startGame(1));
     this.makeButton(W / 2, H * 0.555, '2 PLAYERS', 0x4d8bff, () => this.startGame(2));
@@ -42,26 +63,81 @@ export default class TitleScene extends Phaser.Scene {
     this.input.keyboard.once('keydown-ONE', () => this.startGame(1));
     this.input.keyboard.once('keydown-TWO', () => this.startGame(2));
     this.input.keyboard.once('keydown-S', () => this.scene.start('SettingsScene'));
+    this.setupKonami();
 
-    // Start cheery menu music (audio unlocks on the first user gesture).
+    // Menu music (funky once Rainbow Road is unlocked). Audio unlocks on the
+    // first user gesture.
+    const track = this.psychedelic ? 'Funky' : 'Menu';
     Audio.resumeAudio();
-    Audio.startMusic('Menu');
-    const unlock = () => { Audio.resumeAudio(); Audio.startMusic('Menu'); };
+    Audio.startMusic(track);
+    const unlock = () => { Audio.resumeAudio(); Audio.startMusic(track); };
     this.input.once('pointerdown', unlock);
     this.input.keyboard.once('keydown', unlock);
     this.events.once('shutdown', () => Audio.stopMusic());
+
+    if (this.justUnlocked) this.showUnlockToast(W, H);
+  }
+
+  setupKonami() {
+    this.konamiPos = 0;
+    this.input.keyboard.on('keydown', (e) => {
+      if (this.registry.get('rainbow')) return; // already unlocked
+      if (e.code === KONAMI[this.konamiPos]) {
+        this.konamiPos += 1;
+        if (this.konamiPos === KONAMI.length) this.unlockRainbow();
+      } else {
+        this.konamiPos = e.code === KONAMI[0] ? 1 : 0;
+      }
+    });
+  }
+
+  unlockRainbow() {
+    this.registry.set('rainbow', true);
+    Audio.resumeAudio();
+    Audio.sfx('fanfare');
+    this.scene.restart({ justUnlocked: true });
+  }
+
+  showUnlockToast(W, H) {
+    const t = this.add.text(W / 2, H * 0.46, '🌈  RAINBOW ROAD UNLOCKED!  🌈', {
+      fontFamily: 'monospace', fontSize: '26px', color: '#ffffff', fontStyle: 'bold',
+      stroke: '#000000', strokeThickness: 5,
+    }).setOrigin(0.5).setDepth(60);
+    this.tweens.add({ targets: t, scale: { from: 0.4, to: 1.2 }, duration: 500, ease: 'Back.Out' });
+    this.tweens.add({ targets: t, alpha: { from: 1, to: 0 }, delay: 1600, duration: 700, onComplete: () => t.destroy() });
+  }
+
+  update(time, deltaMs) {
+    if (!this.psychedelic || !this.psyGfx) return;
+    const dt = deltaMs / 1000;
+    this.psyPhase += dt;
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const g = this.psyGfx;
+    g.clear();
+    // Concentric rainbow rings pulsing out from centre.
+    const cx = W / 2;
+    const cy = H * 0.5;
+    const maxR = Math.hypot(W, H) / 2 + 30;
+    for (let r = maxR; r > 0; r -= 26) {
+      const hue = (r / 130 - this.psyPhase * 0.5);
+      g.fillStyle(Phaser.Display.Color.HSVToRGB(((hue % 1) + 1) % 1, 0.65, 1).color, 1);
+      g.fillCircle(cx, cy, r);
+    }
+    // Hue-cycle + wobble the title.
+    this.titleText.setColor(hueHex(this.psyPhase * 0.4));
+    this.titleText.rotation = Math.sin(this.psyPhase * 2.5) * 0.04;
+    // Rainbow-tint the cruising karts.
+    this.karts.forEach((k, i) => k.setTint(Phaser.Display.Color.HSVToRGB(((this.psyPhase * 0.5 + i * 0.2) % 1), 0.8, 1).color));
   }
 
   drawScenery(W, H) {
     const horizon = H * 0.6;
     const g = this.add.graphics().setDepth(0);
-
-    // Sky (banded gradient) + grass.
     g.fillStyle(0x6fc3f0, 1); g.fillRect(0, 0, W, horizon * 0.5);
     g.fillStyle(0x8fd2f3, 1); g.fillRect(0, horizon * 0.5, W, horizon * 0.5);
     g.fillStyle(0x7ec850, 1); g.fillRect(0, horizon, W, H - horizon);
 
-    // Sun with rays.
     const sx = W - 110;
     const sy = 96;
     g.fillStyle(0xffe14d, 0.9);
@@ -76,7 +152,6 @@ export default class TitleScene extends Phaser.Scene {
     g.fillStyle(0xffd23f, 1); g.fillCircle(sx, sy, 50);
     g.fillStyle(0xffe884, 1); g.fillCircle(sx - 14, sy - 14, 20);
 
-    // Clouds.
     const cloud = (cx, cy, s) => {
       g.fillStyle(0xffffff, 0.95);
       g.fillCircle(cx, cy, 20 * s); g.fillCircle(cx + 24 * s, cy + 4 * s, 16 * s);
@@ -84,7 +159,6 @@ export default class TitleScene extends Phaser.Scene {
     };
     cloud(150, 90, 1); cloud(W * 0.42, 60, 0.8); cloud(330, 150, 0.7);
 
-    // Trees on the grass.
     const tree = (tx, ty, s) => {
       g.fillStyle(0x7a4a22, 1); g.fillRect(tx - 5 * s, ty, 10 * s, 26 * s);
       g.fillStyle(0x2f7d36, 1); g.fillCircle(tx, ty, 26 * s); g.fillCircle(tx - 18 * s, ty + 8 * s, 18 * s); g.fillCircle(tx + 18 * s, ty + 8 * s, 18 * s);
@@ -92,12 +166,10 @@ export default class TitleScene extends Phaser.Scene {
     };
     tree(70, horizon + 18, 1); tree(W - 60, horizon + 26, 1.1);
 
-    // Race track across the lower third.
     const roadTop = H * 0.74;
     const roadBot = H * 0.92;
     g.fillStyle(0xffffff, 1); g.fillRect(0, roadTop - 5, W, roadBot - roadTop + 10);
     g.fillStyle(0x4a4a55, 1); g.fillRect(0, roadTop, W, roadBot - roadTop);
-    // Checkered start/finish strip.
     const cell = 18;
     const fx = W * 0.5;
     for (let row = 0, yy = roadTop; yy < roadBot; yy += cell, row += 1) {
@@ -106,14 +178,15 @@ export default class TitleScene extends Phaser.Scene {
         g.fillRect(fx + c * cell - cell, yy, cell, cell);
       }
     }
-    // Dashed centre line.
     g.fillStyle(0xffe14d, 0.9);
     for (let xx = 0; xx < W; xx += 60) g.fillRect(xx, (roadTop + roadBot) / 2 - 2, 32, 4);
+  }
 
-    // Karts cruising along the track.
-    const laneY = (roadTop + roadBot) / 2;
+  addCruisingKarts(W, H) {
+    const laneY = (H * 0.74 + H * 0.92) / 2;
     ROSTER.forEach((r, i) => {
       const k = this.add.image(-80 - i * 120, laneY + (i % 2 ? 18 : -16), `kart_${r.id}`).setDepth(5).setScale(1.5);
+      this.karts.push(k);
       this.tweens.add({
         targets: k, x: W + 90, duration: 4600 + i * 700, repeat: -1, delay: i * 700,
         onRepeat: () => { k.y = laneY + (Math.random() < 0.5 ? -16 : 18); },

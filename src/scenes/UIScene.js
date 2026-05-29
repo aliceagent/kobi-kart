@@ -105,7 +105,8 @@ export default class UIScene extends Phaser.Scene {
     const lead = race.humans[0] || race.order[0];
     const lap = Math.min((lead ? lead.lap : 0) + 1, LAPS);
     const themeName = race.theme ? race.theme.name.toUpperCase() : '';
-    this.banner.setText(`RACE ${race.gp.raceIndex + 1}/4   ·   ${themeName}   ·   LAP ${lap}/${LAPS}`);
+    const total = race.gp.themeOrder.length;
+    this.banner.setText(`RACE ${race.gp.raceIndex + 1}/${total}   ·   ${themeName}   ·   LAP ${lap}/${LAPS}`);
     this.countdownLabel.setText(race.countdownText || '');
 
     // When only the last racer remains, show their 60s finish clock.

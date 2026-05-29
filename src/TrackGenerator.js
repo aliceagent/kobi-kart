@@ -13,6 +13,9 @@ export const THEMES = [
   { name: 'Beach', terrain: 0xf3e1a6, road: 0x70747f, edge: 0xffffff, deco: 0x2fa39a, decoAlt: 0x57d6c4 },
   { name: 'Ice', terrain: 0xdfeefb, road: 0x8fa9c4, edge: 0xffffff, deco: 0xa9d3f5, decoAlt: 0xffffff },
   { name: 'Candy', terrain: 0xffc1e3, road: 0x9b6bce, edge: 0xffffff, deco: 0xff5fa2, decoAlt: 0xfff04d },
+  // Secret Rainbow Road (outer space). Road is drawn as a rainbow at render
+  // time; terrain is the starfield void you fall into.
+  { name: 'Rainbow', terrain: 0x0a0a1f, road: 0x222244, edge: 0xffffff, deco: 0xffffff, decoAlt: 0x9fd6f5 },
 ];
 
 const ROAD_WIDTH = 143; // 10% wider

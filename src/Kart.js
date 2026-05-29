@@ -59,6 +59,9 @@ export default class Kart {
     this.itemBoostTimer = 0;
     this.heldItem = null;
     this.stuckTimer = 0; // time spent wedged off-track (for auto-rescue)
+    this.falling = false; // falling off Rainbow Road into space
+    this.fallTimer = 0;
+    this.respawn = null; // {x, y, heading} to reappear at after a fall
 
     // Race progress (nearest-centerline-index based).
     this.prevX = x;

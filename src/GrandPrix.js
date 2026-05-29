@@ -24,10 +24,13 @@ function shuffle(arr) {
 export function initGrandPrix(registry, playerCount) {
   const points = {};
   ROSTER.forEach((r) => { points[r.id] = 0; });
+  const themeOrder = shuffle(ALL_THEMES);
+  // Konami-unlocked secret: a 5th race on Rainbow Road, always last.
+  if (registry.get('rainbow')) themeOrder.push('Rainbow');
   registry.set('gp', {
     playerCount,
     raceIndex: 0,
-    themeOrder: shuffle(ALL_THEMES),
+    themeOrder,
     points,
     difficulty: registry.get('difficulty') || 'medium',
     lastResults: null, // set after each race
