@@ -25,8 +25,12 @@ export default class TitleScene extends Phaser.Scene {
       fontFamily: 'monospace', fontSize: '17px', color: '#11364f', fontStyle: 'bold',
     }).setOrigin(0.5).setDepth(20);
 
-    this.makeButton(W / 2, H * 0.47, '1 PLAYER', 0xff4d4d, () => this.startGame(1));
-    this.makeButton(W / 2, H * 0.585, '2 PLAYERS', 0x4d8bff, () => this.startGame(2));
+    this.makeButton(W / 2, H * 0.45, '1 PLAYER', 0xff4d4d, () => this.startGame(1));
+    this.makeButton(W / 2, H * 0.555, '2 PLAYERS', 0x4d8bff, () => this.startGame(2));
+
+    const diff = (this.registry.get('difficulty') || 'medium').toUpperCase();
+    this.makeButton(W / 2, H * 0.655, `SETTINGS · AI ${diff}`, 0x9b6bce,
+      () => this.scene.start('SettingsScene'), { w: 320, h: 42, fontSize: 18 });
 
     this.add.text(W / 2, H - 22,
       'P1: A/D · S · W · Shift      P2: ←/→ · ↓ · ↑ · Enter      M: mute',
@@ -37,6 +41,7 @@ export default class TitleScene extends Phaser.Scene {
 
     this.input.keyboard.once('keydown-ONE', () => this.startGame(1));
     this.input.keyboard.once('keydown-TWO', () => this.startGame(2));
+    this.input.keyboard.once('keydown-S', () => this.scene.start('SettingsScene'));
 
     // Start cheery menu music (audio unlocks on the first user gesture).
     Audio.resumeAudio();
@@ -116,9 +121,10 @@ export default class TitleScene extends Phaser.Scene {
     });
   }
 
-  makeButton(x, y, label, color, onClick) {
-    const w = 280;
-    const h = 54;
+  makeButton(x, y, label, color, onClick, opts = {}) {
+    const w = opts.w || 280;
+    const h = opts.h || 54;
+    const fontSize = opts.fontSize || 26;
     const g = this.add.graphics().setDepth(20);
     const draw = (hover) => {
       g.clear();
@@ -128,7 +134,7 @@ export default class TitleScene extends Phaser.Scene {
     };
     draw(false);
     const text = this.add.text(x, y, label, {
-      fontFamily: 'monospace', fontSize: '26px', color: '#ffffff', fontStyle: 'bold',
+      fontFamily: 'monospace', fontSize: `${fontSize}px`, color: '#ffffff', fontStyle: 'bold',
     }).setOrigin(0.5).setDepth(21);
     const zone = this.add.zone(x, y, w, h).setInteractive({ useHandCursor: true });
     zone.on('pointerover', () => { draw(true); text.setScale(1.05); });

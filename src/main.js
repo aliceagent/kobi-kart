@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { ROSTER } from './GrandPrix.js';
 import { makeKartTexture, makeGameTextures } from './textures.js';
 import TitleScene from './scenes/TitleScene.js';
+import SettingsScene from './scenes/SettingsScene.js';
 import RaceScene from './scenes/RaceScene.js';
 import UIScene from './scenes/UIScene.js';
 import ResultsScene from './scenes/ResultsScene.js';
@@ -15,6 +16,13 @@ class BootScene extends Phaser.Scene {
   create() {
     ROSTER.forEach((r) => makeKartTexture(this, `kart_${r.id}`, r.color, r.trim));
     makeGameTextures(this);
+    // Seed the saved AI difficulty (defaults to medium).
+    let saved = 'medium';
+    try {
+      const s = window.localStorage.getItem('kobikart.difficulty');
+      if (s === 'easy' || s === 'medium' || s === 'hard') saved = s;
+    } catch (e) { /* ignore */ }
+    this.registry.set('difficulty', saved);
     this.scene.start('TitleScene');
   }
 }
@@ -26,7 +34,7 @@ const config = {
   parent: 'game',
   backgroundColor: '#0e0e16',
   pixelArt: false,
-  scene: [BootScene, TitleScene, RaceScene, UIScene, ResultsScene, CeremonyScene],
+  scene: [BootScene, TitleScene, SettingsScene, RaceScene, UIScene, ResultsScene, CeremonyScene],
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,

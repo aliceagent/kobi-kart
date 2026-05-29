@@ -29,10 +29,21 @@ export function initGrandPrix(registry, playerCount) {
     raceIndex: 0,
     themeOrder: shuffle(ALL_THEMES),
     points,
+    difficulty: registry.get('difficulty') || 'medium',
     lastResults: null, // set after each race
     debugAllAI: false, // test hook: drive human karts with AI too
   });
 }
+
+// AI behaviour per difficulty. speedMul caps the AI's top speed; band is how
+// much trailing AI catch up (rubber-banding); boostGate is how much fuel they
+// hoard before boosting (higher = boosts less); itemChance is per-frame odds
+// of firing a held item.
+export const AI_DIFFICULTY = {
+  easy: { speedMul: 0.80, band: 0.0, boostGate: 85, itemChance: 0.010 },
+  medium: { speedMul: 0.90, band: 0.006, boostGate: 55, itemChance: 0.020 },
+  hard: { speedMul: 1.0, band: 0.012, boostGate: 45, itemChance: 0.030 },
+};
 
 export function totalStandings(gp) {
   return ROSTER.map((r) => ({ ...r, points: gp.points[r.id] }))

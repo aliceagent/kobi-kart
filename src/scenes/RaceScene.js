@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import Kart, { TUNE } from '../Kart.js';
 import { generateTrack } from '../TrackGenerator.js';
 import { THEME_PROPS } from '../Props.js';
-import { ROSTER, POINTS, LAPS } from '../GrandPrix.js';
+import { ROSTER, POINTS, LAPS, AI_DIFFICULTY } from '../GrandPrix.js';
 import { makeKartTexture, makeGameTextures } from '../textures.js';
 import * as Audio from '../Audio.js';
 
@@ -35,6 +35,7 @@ export default class RaceScene extends Phaser.Scene {
 
   create() {
     this.gp = this.registry.get('gp');
+    this.aiCfg = AI_DIFFICULTY[this.gp.difficulty] || AI_DIFFICULTY.medium;
     const themeName = this.gp.themeOrder[this.gp.raceIndex];
 
     const track = generateTrack(WORLD_W, WORLD_H, themeName);
@@ -181,7 +182,7 @@ export default class RaceScene extends Phaser.Scene {
     const steer = Phaser.Math.Clamp(diff / 0.4, -1, 1);
     // Only brake when moving fast, so the AI never brakes itself to a standstill.
     const braking = Math.abs(diff) > 0.85 && kart.speed > 170;
-    const boosting = Math.abs(diff) < 0.12 && kart.boostFuel > 45;
+    const boosting = Math.abs(diff) < 0.12 && kart.boostFuel > this.aiCfg.boostGate;
     return { steer, braking, boosting };
   }
 
@@ -461,13 +462,15 @@ export default class RaceScene extends Phaser.Scene {
   }
 
   applyRubberBand() {
-    // Lead = furthest progressed racer. Trailing AI get a small boost.
+    // Lead = furthest progressed racer. The AI's base pace comes from the
+    // chosen difficulty; trailing AI catch up by the difficulty's band amount.
+    const cfg = this.aiCfg;
     let lead = -Infinity;
     for (const r of this.racers) lead = Math.max(lead, this.progress(r));
     for (const r of this.racers) {
       if (!r.isAI) { r.speedMul = 1; continue; }
       const behind = lead - this.progress(r);
-      r.speedMul = Phaser.Math.Clamp(1 + behind * 0.012, 0.94, 1.12);
+      r.speedMul = Phaser.Math.Clamp(cfg.speedMul + behind * cfg.band, cfg.speedMul - 0.06, cfg.speedMul + 0.18);
     }
   }
 
@@ -538,7 +541,7 @@ export default class RaceScene extends Phaser.Scene {
       if (Phaser.Input.Keyboard.JustDown(this.keysP2.item)) this.useItem(kart);
     }
     // AI uses items shortly after grabbing one.
-    if (kart.isAI && kart.heldItem && !kart.spunOut && Math.random() < 0.03) this.useItem(kart);
+    if (kart.isAI && kart.heldItem && !kart.spunOut && Math.random() < this.aiCfg.itemChance) this.useItem(kart);
 
     kart.drive(dt, input.steer, input.braking, input.boosting, this.isOnRoad(kart.x, kart.y));
   }
