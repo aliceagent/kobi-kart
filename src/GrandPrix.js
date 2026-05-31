@@ -24,17 +24,21 @@ function shuffle(arr) {
   return a;
 }
 
-export function initGrandPrix(registry, playerCount) {
+// picks: ROSTER indices the human player(s) chose, in player order. Those
+// karts become the humans; the rest are filled by AI.
+export function initGrandPrix(registry, playerCount, picks) {
   const points = {};
   ROSTER.forEach((r) => { points[r.id] = 0; });
   const themeOrder = shuffle(ALL_THEMES);
   // Konami-unlocked secret: a 5th race on Rainbow Road, always last.
   if (registry.get('rainbow')) themeOrder.push('Rainbow');
+  const chosen = (picks && picks.length ? picks : [0, 1, 2, 3]).slice(0, playerCount);
   registry.set('gp', {
     playerCount,
     raceIndex: 0,
     themeOrder,
     points,
+    picks: chosen,
     difficulty: registry.get('difficulty') || 'medium',
     lastResults: null, // set after each race
     debugAllAI: false, // test hook: drive human karts with AI too

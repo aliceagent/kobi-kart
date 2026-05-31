@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { initGrandPrix, ROSTER } from '../GrandPrix.js';
+import { ROSTER } from '../GrandPrix.js';
 import * as Audio from '../Audio.js';
 import { addMuteButton } from '../ui.js';
 
@@ -230,7 +230,6 @@ export default class TitleScene extends Phaser.Scene {
 
   startGame(count) {
     Audio.resumeAudio();
-    initGrandPrix(this.registry, count);
-    this.scene.start('RaceScene');
+    this.scene.start('CharacterSelectScene', { playerCount: count });
   }
 }

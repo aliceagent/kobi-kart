@@ -141,9 +141,17 @@ export default class RaceScene extends Phaser.Scene {
     }
     const offset = this.roadWidth * 0.22;
 
+    // Order the roster so the human-chosen colors come first (they're the
+    // humans); the remaining colors fill in as AI.
+    const picks = (this.gp.picks && this.gp.picks.length)
+      ? this.gp.picks : [0, 1, 2, 3].slice(0, this.gp.playerCount);
+    const pickSet = new Set(picks);
+    const ordered = picks.map((idx) => ROSTER[idx])
+      .concat(ROSTER.filter((r, idx) => !pickSet.has(idx)));
+
     this.racers = [];
     this.humans = [];
-    ROSTER.forEach((r, i) => {
+    ordered.forEach((r, i) => {
       const slot = slots[slotOrder[i]];
       const idx = (((-slot.back) % n) + n) % n;
       const p = cl[idx];
