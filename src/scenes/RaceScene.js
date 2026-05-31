@@ -371,6 +371,18 @@ export default class RaceScene extends Phaser.Scene {
     else if (item === 'trap') this.spawnTrap(kart);
   }
 
+  // The racer one place ahead of this kart (a red shell's prey).
+  racerAhead(kart) {
+    let best = null;
+    for (const r of this.racers) {
+      if (r === kart || r.finished) continue;
+      if ((r.livePlace || 99) < (kart.livePlace || 99)) {
+        if (!best || r.livePlace > best.livePlace) best = r;
+      }
+    }
+    return best;
+  }
+
   // type: 'green' (straight), 'red' (homing), 'blue' (leader-seeking).
   spawnProjectile(kart, type) {
     const ox = Math.cos(kart.heading);
@@ -382,13 +394,14 @@ export default class RaceScene extends Phaser.Scene {
 
     let speed; let turnRate; let life;
     if (type === 'green') { speed = 480 + kart.speed; turnRate = 0; life = 4.5; } // bounces, so lives a bit longer
-    else if (type === 'red') { speed = 430; turnRate = 3.8; life = 5; }
+    else if (type === 'red') { speed = 470; turnRate = 4.2; life = 5; } // locks onto the racer ahead
     else { speed = 473; turnRate = 4.6; life = 11; } // blue: 10% faster, tighter turns, long reach
 
     this.projectiles.push({
       sprite, x: sprite.x, y: sprite.y,
       vx: ox * speed, vy: oy * speed, speed,
       owner: kart, homing, blue, turnRate, life,
+      target: type === 'red' ? this.racerAhead(kart) : null,
       hitSet: new Set(), // racers a blue shell has already spun out (passes through them)
     });
   }
@@ -400,19 +413,6 @@ export default class RaceScene extends Phaser.Scene {
     const y = kart.y - oy * 28;
     const sprite = this.add.image(x, y, 'oil').setDepth(7);
     this.traps.push({ sprite, x, y, life: 14, grace: 0.6, owner: kart });
-  }
-
-  // True if a shell at (x,y) with radius r is touching a guard rail or a solid
-  // off-road prop.
-  hitsEnvironment(x, y, r) {
-    for (const o of this.obstacles) {
-      if ((x - o.x) ** 2 + (y - o.y) ** 2 < (r + o.radius) ** 2) return true;
-    }
-    const railReach = r + 6; // rails are ~12px thick
-    for (const s of this.rails) {
-      if (distToSegSq(x, y, s.ax, s.ay, s.bx, s.by) < railReach * railReach) return true;
-    }
-    return false;
   }
 
   // Reflect a (green) shell off the nearest rail or obstacle it overlaps,
@@ -453,21 +453,26 @@ export default class RaceScene extends Phaser.Scene {
       const p = this.projectiles[i];
       p.life -= dt;
 
-      // Red shells chase along the racing line (so they stay on the road)
-      // rather than cutting straight at the target. Limited turn rate + 5s
-      // lifetime keep them escapable by boosting away. If one does stray off
-      // the track, rough terrain slows it down just like a kart.
       if (p.homing) {
-        const n = this.centerline.length;
         const onRoad = this.isOnRoad(p.x, p.y);
-        const idx = this.nearestIndex(p.x, p.y);
-        const look = onRoad ? 5 : 2; // off-road: aim closer to cut back onto the track
-        const aim = this.centerline[(idx + look) % n];
-        const desired = Math.atan2(aim.y - p.y, aim.x - p.x);
+        const eff = onRoad ? p.speed : p.speed * 0.5; // rough terrain slows it
         const cur = Math.atan2(p.vy, p.vx);
+        let desired = cur;
+        if (p.blue) {
+          // Blue shell follows the racing line toward the distant leader.
+          const n = this.centerline.length;
+          const idx = this.nearestIndex(p.x, p.y);
+          const aim = this.centerline[(idx + (onRoad ? 5 : 2)) % n];
+          desired = Math.atan2(aim.y - p.y, aim.x - p.x);
+        } else {
+          // Red shell locks straight onto the racer ahead. Its turn rate is the
+          // only limit — at close range a hard turn + a speed boost can make it
+          // overshoot, but otherwise it WILL run you down.
+          if (!p.target || p.target.finished) p.target = this.racerAhead(p.owner);
+          if (p.target) desired = Math.atan2(p.target.y - p.y, p.target.x - p.x);
+        }
         const turn = Phaser.Math.Clamp(Phaser.Math.Angle.Wrap(desired - cur), -p.turnRate * dt, p.turnRate * dt);
         const a = cur + turn;
-        const eff = onRoad ? p.speed : p.speed * 0.5; // rough-terrain penalty
         p.vx = Math.cos(a) * eff;
         p.vy = Math.sin(a) * eff;
       }
@@ -506,19 +511,10 @@ export default class RaceScene extends Phaser.Scene {
           }
         }
       }
-      if (!dead && !p.blue) {
-        if (p.homing) {
-          // Red shells shatter on walls/props (rare — they hug the road).
-          if (this.hitsEnvironment(p.x, p.y, 9)) {
-            this.burst(p.x, p.y, 0xff8a8a);
-            Audio.sfx('bump');
-            dead = true;
-          }
-        } else {
-          // Green shells ricochet off rails and obstacles instead of dying.
-          this.bounceProjectile(p);
-        }
-      }
+      // Green shells ricochet off rails and obstacles. Red and blue shells are
+      // relentless homing missiles — they fly over walls so you can't dodge by
+      // ducking behind one.
+      if (!dead && !p.homing) this.bounceProjectile(p);
       if (dead) { p.sprite.destroy(); this.projectiles.splice(i, 1); }
     }
   }
