@@ -1,11 +1,17 @@
 // Grand Prix state + roster. Stored on the Phaser registry so it survives
 // scene transitions (Title -> Race x4 -> Ceremony).
 
+// Palette of selectable car colours. Each race uses a 4-kart lineup drawn from
+// these (the human picks + AI fillers).
 export const ROSTER = [
-  { id: 'p1', name: 'Red', color: 0xff4d4d, trim: 0xb01e1e },
-  { id: 'p2', name: 'Blue', color: 0x4d8bff, trim: 0x1e46b0 },
-  { id: 'c1', name: 'Green', color: 0x57c75a, trim: 0x2f7d32 },
-  { id: 'c2', name: 'Yellow', color: 0xffd23f, trim: 0xb8870f },
+  { id: 'red', name: 'Red', color: 0xff4d4d, trim: 0xb01e1e },
+  { id: 'blue', name: 'Blue', color: 0x4d8bff, trim: 0x1e46b0 },
+  { id: 'green', name: 'Green', color: 0x57c75a, trim: 0x2f7d32 },
+  { id: 'yellow', name: 'Yellow', color: 0xffd23f, trim: 0xb8870f },
+  { id: 'orange', name: 'Orange', color: 0xff8a2c, trim: 0xb85a0f },
+  { id: 'purple', name: 'Purple', color: 0xb06bce, trim: 0x6a3a8c },
+  { id: 'white', name: 'White', color: 0xf2f2f7, trim: 0xb0b0be },
+  { id: 'black', name: 'Black', color: 0x3a3a42, trim: 0x6f6f7a },
 ];
 
 export const POINTS = [10, 6, 3, 1]; // awarded for 1st..4th each race
@@ -24,21 +30,31 @@ function shuffle(arr) {
   return a;
 }
 
-// picks: ROSTER indices the human player(s) chose, in player order. Those
-// karts become the humans; the rest are filled by AI.
+// picks: ROSTER (palette) indices the human player(s) chose, in player order.
+// Those become the humans; the 4-kart lineup is filled out with random AI
+// colours from the rest of the palette.
 export function initGrandPrix(registry, playerCount, picks) {
+  const chosen = (picks && picks.length ? picks : [0, 1, 2, 3]).slice(0, playerCount);
+  const used = new Set(chosen);
+  const pool = ROSTER.map((_, i) => i).filter((i) => !used.has(i));
+  for (let i = pool.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  const lineup = chosen.concat(pool).slice(0, 4); // 4 palette indices, humans first
+
   const points = {};
-  ROSTER.forEach((r) => { points[r.id] = 0; });
+  lineup.forEach((idx) => { points[ROSTER[idx].id] = 0; });
   const themeOrder = shuffle(ALL_THEMES);
   // Konami-unlocked secret: a 5th race on Rainbow Road, always last.
   if (registry.get('rainbow')) themeOrder.push('Rainbow');
-  const chosen = (picks && picks.length ? picks : [0, 1, 2, 3]).slice(0, playerCount);
   registry.set('gp', {
     playerCount,
     raceIndex: 0,
     themeOrder,
     points,
     picks: chosen,
+    lineup,
     difficulty: registry.get('difficulty') || 'medium',
     lastResults: null, // set after each race
     debugAllAI: false, // test hook: drive human karts with AI too
@@ -56,6 +72,7 @@ export const AI_DIFFICULTY = {
 };
 
 export function totalStandings(gp) {
-  return ROSTER.map((r) => ({ ...r, points: gp.points[r.id] }))
+  const lineup = gp.lineup || [0, 1, 2, 3];
+  return lineup.map((idx) => { const r = ROSTER[idx]; return { ...r, points: gp.points[r.id] }; })
     .sort((a, b) => b.points - a.points);
 }

@@ -197,7 +197,7 @@ export default class TitleScene extends Phaser.Scene {
 
   addCruisingKarts(W, H) {
     const laneY = (H * 0.74 + H * 0.85) / 2;
-    ROSTER.forEach((r, i) => {
+    ROSTER.slice(0, 5).forEach((r, i) => {
       const k = this.add.image(-80 - i * 120, laneY + (i % 2 ? 18 : -16), `kart_${r.id}`).setDepth(5).setScale(1.5);
       this.karts.push(k);
       this.tweens.add({

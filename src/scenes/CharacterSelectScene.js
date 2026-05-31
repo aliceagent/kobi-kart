@@ -34,32 +34,38 @@ export default class CharacterSelectScene extends Phaser.Scene {
       stroke: '#000000', strokeThickness: 4,
     }).setOrigin(0.5);
 
-    // Build the car cards.
+    // Build the car cards in a 4-column grid (two rows for the 8 colours).
     this.picks = [];
     this.chooser = 0;
     this.locked = new Array(ROSTER.length).fill(-1); // which player locked each car (-1 = free)
     this.cards = [];
-    const cardW = 200;
-    const gap = 24;
-    const totalW = ROSTER.length * cardW + (ROSTER.length - 1) * gap;
-    const startX = (W - totalW) / 2 + cardW / 2;
-    const cy = H * 0.52;
+    const cols = 4;
+    const cardW = 180;
+    const cardH = 138;
+    const gapX = 18;
+    const gapY = 22;
+    const gridW = cols * cardW + (cols - 1) * gapX;
+    const startX = (W - gridW) / 2 + cardW / 2;
+    const startY = H * 0.40;
 
     ROSTER.forEach((r, i) => {
-      const x = startX + i * (cardW + gap);
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const x = startX + col * (cardW + gapX);
+      const cy = startY + row * (cardH + gapY);
       const g = this.add.graphics();
-      const kart = this.add.image(x, cy - 6, `kart_${r.id}`).setScale(2.4);
+      const kart = this.add.image(x, cy - 6, `kart_${r.id}`).setScale(1.7);
       kart.rotation = -Math.PI / 2; // point up toward the player
-      const name = this.add.text(x, cy + 64, r.name.toUpperCase(), {
-        fontFamily: 'monospace', fontSize: '22px', color: '#ffffff', fontStyle: 'bold',
+      const name = this.add.text(x, cy + 44, r.name.toUpperCase(), {
+        fontFamily: 'monospace', fontSize: '18px', color: '#ffffff', fontStyle: 'bold',
         stroke: '#000000', strokeThickness: 3,
       }).setOrigin(0.5);
-      const tag = this.add.text(x, cy - 78, '', {
-        fontFamily: 'monospace', fontSize: '18px', color: '#ffffff', fontStyle: 'bold',
+      const tag = this.add.text(x, cy - 50, '', {
+        fontFamily: 'monospace', fontSize: '16px', color: '#ffffff', fontStyle: 'bold',
         stroke: '#000000', strokeThickness: 4,
       }).setOrigin(0.5);
-      this.cards.push({ r, i, x, cy, cardW, cardH: 200, g, kart, name, tag });
-      this.add.zone(x, cy, cardW, 200).setInteractive({ useHandCursor: true })
+      this.cards.push({ r, i, x, cy, cardW, cardH, g, kart, name, tag });
+      this.add.zone(x, cy, cardW, cardH).setInteractive({ useHandCursor: true })
         .on('pointerover', () => { if (this.isFree(i)) { this.cursor = i; this.redraw(); } })
         .on('pointerdown', () => { if (this.isFree(i)) { this.cursor = i; this.confirm(); } });
     });
