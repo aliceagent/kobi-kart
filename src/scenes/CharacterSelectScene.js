@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { ROSTER, initGrandPrix } from '../GrandPrix.js';
+import { ROSTER, initGrandPrix, CUPS } from '../GrandPrix.js';
 import { makeKartTexture } from '../textures.js';
 import * as Audio from '../Audio.js';
 import { addMuteButton } from '../ui.js';
@@ -34,6 +34,19 @@ export default class CharacterSelectScene extends Phaser.Scene {
       fontFamily: 'monospace', fontSize: '24px', color: '#ffffff', fontStyle: 'bold',
       stroke: '#000000', strokeThickness: 4,
     }).setOrigin(0.5);
+
+    // Summary of what this Grand Prix is set to: cup, car speed, AI difficulty.
+    const cupName = (CUPS[this.cup === 2 ? 1 : 0] || CUPS[0]).name;
+    const cupIcon = this.cup === 2 ? '🏁' : '🌱';
+    const speed = (this.registry.get('carSpeed') || 'medium').toUpperCase();
+    const diff = (this.registry.get('difficulty') || 'medium').toUpperCase();
+    this.add.text(W / 2, H * 0.185,
+      `${cupIcon} ${cupName}    ·    SPEED ${speed}    ·    ${diff} AI`, {
+        fontFamily: 'monospace', fontSize: '16px', color: '#ffe7b0', fontStyle: 'bold',
+        stroke: '#000000', strokeThickness: 4,
+      }).setOrigin(0.5);
+
+    this.makeBackButton();
 
     // Build the car cards in a 4-column grid (two rows for the 8 colours).
     this.picks = [];
@@ -82,7 +95,31 @@ export default class CharacterSelectScene extends Phaser.Scene {
     addMuteButton(this);
 
     Audio.resumeAudio();
-    this.input.keyboard.on('keydown-ESC', () => this.scene.start('TitleScene'));
+    this.input.keyboard.on('keydown-ESC', () => this.goBack());
+  }
+
+  // A "back" button (top-left) that returns to the cup-select screen.
+  makeBackButton() {
+    const x = 22;
+    const y = 20;
+    const w = 92;
+    const h = 34;
+    const g = this.add.graphics().setDepth(20);
+    g.fillStyle(0x000000, 0.4); g.fillRoundedRect(x, y, w, h, 8);
+    g.lineStyle(2, 0xffffff, 0.85); g.strokeRoundedRect(x, y, w, h, 8);
+    this.add.text(x + w / 2, y + h / 2, '← BACK', {
+      fontFamily: 'monospace', fontSize: '15px', color: '#ffffff', fontStyle: 'bold',
+      stroke: '#000000', strokeThickness: 3,
+    }).setOrigin(0.5).setDepth(21);
+    this.add.zone(x + w / 2, y + h / 2, w, h).setInteractive({ useHandCursor: true })
+      .on('pointerover', () => { g.clear(); g.fillStyle(0x000000, 0.55); g.fillRoundedRect(x, y, w, h, 8); g.lineStyle(2.5, 0xffe14d, 1); g.strokeRoundedRect(x, y, w, h, 8); })
+      .on('pointerout', () => { g.clear(); g.fillStyle(0x000000, 0.4); g.fillRoundedRect(x, y, w, h, 8); g.lineStyle(2, 0xffffff, 0.85); g.strokeRoundedRect(x, y, w, h, 8); })
+      .on('pointerdown', () => this.goBack());
+  }
+
+  goBack() {
+    Audio.sfx('beep');
+    this.scene.start('CupSelectScene', { playerCount: this.playerCount });
   }
 
   setupKeys() {

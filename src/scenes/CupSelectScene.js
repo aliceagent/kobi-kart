@@ -5,7 +5,7 @@ import { addMuteButton } from '../ui.js';
 
 const WORLD_LABEL = {
   Grassy: '🌳 Grassy', Beach: '🏖 Beach', Ice: '❄ Ice', Candy: '🍭 Candy',
-  Volcano: 'Volcano — lava', Storm: 'Storm — wind', Jungle: 'Jungle — mud', Neon: 'Neon — speed',
+  Volcano: '🌋 Volcano — lava', Storm: '⛈️ Storm — wind', Jungle: '🌿 Jungle — mud', Neon: '🌃 Neon — speed',
 };
 const CUP_COLOR = [0x57c75a, 0xff6a2c]; // Starter (green) / Pro (orange)
 
