@@ -69,7 +69,31 @@ export default class UIScene extends Phaser.Scene {
       stroke: '#000000', strokeThickness: 4,
     }).setOrigin(0.5).setDepth(31).setVisible(false);
 
+    // Neon: a dark vignette closing in around the action (reduced visibility).
+    if (this.race && this.race.lowVis) this.addVignette();
+
     addMuteButton(this);
+  }
+
+  addVignette() {
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const key = 'neonVignette';
+    try {
+      if (!this.textures.exists(key)) {
+        const tex = this.textures.createCanvas(key, W, H);
+        const ctx = tex && tex.getContext('2d');
+        if (!ctx) return;
+        const grd = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.22, W / 2, H / 2, Math.max(W, H) * 0.62);
+        grd.addColorStop(0, 'rgba(0,0,0,0)');
+        grd.addColorStop(0.7, 'rgba(2,2,10,0.35)');
+        grd.addColorStop(1, 'rgba(0,0,6,0.92)');
+        ctx.fillStyle = grd;
+        ctx.fillRect(0, 0, W, H);
+        tex.refresh();
+      }
+      this.add.image(W / 2, H / 2, key).setDepth(9).setScrollFactor(0);
+    } catch (e) { /* vignette is decorative — never break the HUD */ }
   }
 
   drawBar(x, y, kart, color, rightAlign) {

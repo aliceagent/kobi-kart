@@ -388,10 +388,297 @@ const sprinkles = {
   },
 };
 
+// --------------------------------------------------------------- Volcano ----
+const volcanoRock = {
+  solid: true, rFactor: 0.6, min: 30, max: 46, weight: 3,
+  draw(g, x, y, s) {
+    shadow(g, x, y + s * 0.4, s * 1.3, s * 0.35);
+    const pts = [
+      { x: x - s * 0.7, y: y + s * 0.3 }, { x: x - s * 0.5, y: y - s * 0.35 },
+      { x: x - s * 0.05, y: y - s * 0.55 }, { x: x + s * 0.5, y: y - s * 0.3 },
+      { x: x + s * 0.7, y: y + s * 0.25 }, { x: x + s * 0.2, y: y + s * 0.45 },
+    ];
+    g.fillStyle(0x2a2622, 1); g.fillPoints(pts, true);
+    g.fillStyle(0x3d3733, 1);
+    g.fillPoints([
+      { x: x - s * 0.5, y: y - 0.34 * s }, { x: x - 0.05 * s, y: y - 0.55 * s },
+      { x: x + 0.1 * s, y: y - 0.2 * s }, { x: x - 0.3 * s, y: y - 0.1 * s },
+    ], true);
+    g.lineStyle(s * 0.05, 0xff5a1a, 0.9);
+    g.beginPath(); g.moveTo(x - s * 0.3, y + s * 0.2); g.lineTo(x, y - s * 0.1); g.lineTo(x + s * 0.25, y + s * 0.25); g.strokePath();
+  },
+};
+
+const lavaPool = {
+  solid: false, min: 34, max: 50, weight: 4,
+  draw(g, x, y, s) {
+    g.fillStyle(0x6a1c08, 1); g.fillEllipse(x, y, s * 1.2, s * 0.8);
+    g.fillStyle(0xff4d12, 0.95); g.fillEllipse(x, y, s * 0.85, s * 0.5);
+    g.fillStyle(0xffd23f, 0.9); g.fillEllipse(x - s * 0.1, y - s * 0.05, s * 0.4, s * 0.22);
+  },
+};
+
+const charredTree = {
+  solid: true, rFactor: 0.4, min: 40, max: 56, weight: 2,
+  draw(g, x, y, s) {
+    shadow(g, x, y + s * 0.7, s * 0.9, s * 0.3);
+    g.fillStyle(0x1a1714, 1);
+    g.fillRect(x - s * 0.1, y - s * 0.1, s * 0.2, s * 0.8);
+    g.lineStyle(s * 0.08, 0x1a1714, 1);
+    for (const side of [-1, 1]) {
+      g.beginPath(); g.moveTo(x, y - s * 0.05); g.lineTo(x + side * s * 0.35, y - s * 0.4); g.strokePath();
+      g.beginPath(); g.moveTo(x, y - s * 0.25); g.lineTo(x + side * s * 0.28, y - s * 0.55); g.strokePath();
+    }
+    g.fillStyle(0xff6a1a, 0.5); g.fillCircle(x, y - s * 0.1, s * 0.12);
+  },
+};
+
+const emberVent = {
+  solid: true, rFactor: 0.5, min: 28, max: 40, weight: 2,
+  draw(g, x, y, s) {
+    shadow(g, x, y + s * 0.4, s * 1.0, s * 0.3);
+    g.fillStyle(0x231f1c, 1);
+    g.fillTriangle(x - s * 0.6, y + s * 0.4, x + s * 0.6, y + s * 0.4, x, y - s * 0.4);
+    g.fillStyle(0x3a3330, 1);
+    g.fillTriangle(x - s * 0.25, y + s * 0.4, x + s * 0.25, y + s * 0.4, x, y - s * 0.1);
+    g.fillStyle(0xff5a1a, 0.95); g.fillCircle(x, y - s * 0.2, s * 0.16);
+    g.fillStyle(0xffd23f, 0.9); g.fillCircle(x, y - s * 0.24, s * 0.08);
+  },
+};
+
+const cinders = {
+  solid: false, min: 26, max: 40, weight: 5,
+  draw(g, x, y, s) {
+    const colors = [0xff6a1a, 0xffd23f, 0x7a3010];
+    const n = 6 + Math.floor(Math.random() * 5);
+    for (let k = 0; k < n; k += 1) {
+      const cx = x + (Math.random() - 0.5) * s * 1.6;
+      const cy = y + (Math.random() - 0.5) * s * 1.6;
+      g.fillStyle(randPick(colors), 0.8);
+      g.fillCircle(cx, cy, s * 0.05 + Math.random() * s * 0.05);
+    }
+  },
+};
+
+// ----------------------------------------------------------------- Storm ----
+const stormRock = {
+  solid: true, rFactor: 0.6, min: 28, max: 42, weight: 3,
+  draw(g, x, y, s) {
+    shadow(g, x, y + s * 0.4, s * 1.2, s * 0.32);
+    const pts = [
+      { x: x - s * 0.65, y: y + s * 0.3 }, { x: x - s * 0.45, y: y - s * 0.3 },
+      { x: x, y: y - s * 0.5 }, { x: x + s * 0.5, y: y - s * 0.25 }, { x: x + s * 0.6, y: y + s * 0.3 },
+    ];
+    g.fillStyle(0x4a4f57, 1); g.fillPoints(pts, true);
+    g.fillStyle(0x5e636b, 1);
+    g.fillPoints([{ x: x - s * 0.4, y: y - 0.28 * s }, { x: x, y: y - 0.5 * s }, { x: x + 0.05 * s, y: y - 0.15 * s }], true);
+  },
+};
+
+const deadPine = {
+  solid: true, rFactor: 0.4, min: 40, max: 54, weight: 3,
+  draw(g, x, y, s) {
+    shadow(g, x, y + s * 0.62, s * 0.8, s * 0.26);
+    g.fillStyle(0x3a3026, 1); g.fillRect(x - s * 0.07, y - s * 0.5, s * 0.14, s * 1.1);
+    g.lineStyle(s * 0.06, 0x4a3f31, 1);
+    for (const side of [-1, 1]) {
+      for (let k = 0; k < 3; k += 1) {
+        const ly = y - s * 0.4 + k * s * 0.3;
+        g.beginPath(); g.moveTo(x, ly); g.lineTo(x + side * s * 0.4, ly - s * 0.18); g.strokePath();
+      }
+    }
+  },
+};
+
+const puddle = {
+  solid: false, min: 40, max: 58, weight: 5,
+  draw(g, x, y, s) {
+    g.fillStyle(0x2a3540, 0.8); g.fillEllipse(x, y, s * 1.3, s * 0.7);
+    g.fillStyle(0x5a7488, 0.6); g.fillEllipse(x - s * 0.1, y - s * 0.05, s * 0.7, s * 0.32);
+    g.fillStyle(0xaecadb, 0.4); g.fillEllipse(x - s * 0.2, y - s * 0.1, s * 0.3, s * 0.1);
+  },
+};
+
+const reeds = {
+  solid: false, min: 30, max: 44, weight: 4,
+  draw(g, x, y, s) {
+    const n = 5 + Math.floor(Math.random() * 4);
+    g.lineStyle(s * 0.05, 0x4a5b3a, 1);
+    for (let k = 0; k < n; k += 1) {
+      const rx = x + (Math.random() - 0.5) * s * 1.2;
+      const lean = (Math.random() - 0.5) * s * 0.3;
+      g.beginPath(); g.moveTo(rx, y + s * 0.4); g.lineTo(rx + lean, y - s * 0.5); g.strokePath();
+    }
+  },
+};
+
+const signPost = {
+  solid: true, rFactor: 0.32, min: 30, max: 42, weight: 2,
+  draw(g, x, y, s) {
+    shadow(g, x, y + s * 0.6, s * 0.5, s * 0.16);
+    g.fillStyle(0x3a3026, 1); g.fillRect(x - s * 0.05, y - s * 0.3, s * 0.1, s * 0.9);
+    g.fillStyle(0x8a6a3a, 1); g.fillRect(x - s * 0.35, y - s * 0.5, s * 0.7, s * 0.3);
+    g.lineStyle(s * 0.04, 0x5a4528, 1); g.strokeRect(x - s * 0.35, y - s * 0.5, s * 0.7, s * 0.3);
+  },
+};
+
+// ---------------------------------------------------------------- Jungle ----
+const jungleTree = {
+  solid: true, rFactor: 0.55, min: 46, max: 64, weight: 4,
+  draw(g, x, y, s) {
+    shadow(g, x, y + s * 0.74, s * 1.3, s * 0.4);
+    g.fillStyle(0x6b4a26, 1); g.fillRect(x - s * 0.12, y + s * 0.05, s * 0.24, s * 0.75);
+    g.fillStyle(0x1f5a23, 1);
+    g.fillCircle(x - s * 0.5, y - s * 0.05, s * 0.5);
+    g.fillCircle(x + s * 0.5, y - s * 0.05, s * 0.5);
+    g.fillCircle(x, y - s * 0.45, s * 0.62);
+    g.fillCircle(x, y, s * 0.55);
+    g.fillStyle(0x2f8a33, 1);
+    g.fillCircle(x - s * 0.2, y - s * 0.4, s * 0.32);
+    g.fillCircle(x + s * 0.25, y - s * 0.1, s * 0.26);
+  },
+};
+
+const fern = {
+  solid: false, min: 34, max: 50, weight: 6,
+  draw(g, x, y, s) {
+    g.lineStyle(s * 0.05, 0x2f7d32, 1);
+    const n = 7;
+    for (let k = 0; k < n; k += 1) {
+      const a = -Math.PI / 2 + (k - (n - 1) / 2) * 0.32;
+      g.beginPath(); g.moveTo(x, y + s * 0.4);
+      g.lineTo(x + Math.cos(a) * s * 0.7, y + s * 0.4 + Math.sin(a) * s * 0.7); g.strokePath();
+    }
+  },
+};
+
+const ruinPillar = {
+  solid: true, rFactor: 0.5, min: 34, max: 50, weight: 3,
+  draw(g, x, y, s) {
+    shadow(g, x, y + s * 0.6, s * 0.9, s * 0.3);
+    g.fillStyle(0x8d8472, 1); g.fillRect(x - s * 0.3, y - s * 0.5, s * 0.6, s * 1.1);
+    g.fillStyle(0x9e9683, 1); g.fillRect(x - s * 0.3, y - s * 0.5, s * 0.2, s * 1.1);
+    g.fillStyle(0x6f6757, 1); g.fillRect(x - s * 0.38, y - s * 0.6, s * 0.76, s * 0.14);
+    g.lineStyle(s * 0.05, 0x3f8f3a, 1);
+    g.beginPath(); g.moveTo(x + s * 0.2, y - s * 0.5); g.lineTo(x + s * 0.05, y); g.lineTo(x + s * 0.2, y + s * 0.4); g.strokePath();
+  },
+};
+
+const idol = {
+  solid: true, rFactor: 0.5, min: 34, max: 48, weight: 2,
+  draw(g, x, y, s) {
+    shadow(g, x, y + s * 0.6, s * 0.9, s * 0.3);
+    g.fillStyle(0x6f7768, 1); g.fillRect(x - s * 0.35, y - s * 0.45, s * 0.7, s * 1.0);
+    g.fillStyle(0x596051, 1);
+    g.fillTriangle(x - s * 0.35, y - s * 0.45, x + s * 0.35, y - s * 0.45, x, y - s * 0.7);
+    g.fillStyle(0xffd23f, 0.9); g.fillCircle(x - s * 0.13, y - s * 0.2, s * 0.08); g.fillCircle(x + s * 0.13, y - s * 0.2, s * 0.08);
+    g.fillStyle(0x2a2e26, 1); g.fillRect(x - s * 0.2, y + s * 0.05, s * 0.4, s * 0.08);
+  },
+};
+
+const vineRock = {
+  solid: true, rFactor: 0.58, min: 30, max: 44, weight: 3,
+  draw(g, x, y, s) {
+    shadow(g, x, y + s * 0.4, s * 1.2, s * 0.32);
+    const pts = [
+      { x: x - s * 0.65, y: y + s * 0.3 }, { x: x - s * 0.4, y: y - s * 0.3 },
+      { x: x + s * 0.1, y: y - s * 0.45 }, { x: x + s * 0.55, y: y - s * 0.2 }, { x: x + s * 0.6, y: y + s * 0.3 },
+    ];
+    g.fillStyle(0x6b6f63, 1); g.fillPoints(pts, true);
+    g.fillStyle(0x3f8f3a, 1);
+    g.fillEllipse(x - s * 0.2, y + s * 0.2, s * 0.5, s * 0.25);
+    g.fillEllipse(x + s * 0.25, y + s * 0.1, s * 0.4, s * 0.2);
+  },
+};
+
+const mushrooms = {
+  solid: false, min: 26, max: 38, weight: 5,
+  draw(g, x, y, s) {
+    const colors = [0xff5a4d, 0xffa83c, 0xc06bff];
+    const n = 3 + Math.floor(Math.random() * 3);
+    for (let k = 0; k < n; k += 1) {
+      const mx = x + (Math.random() - 0.5) * s * 1.3;
+      const my = y + (Math.random() - 0.5) * s * 1.0;
+      g.fillStyle(0xefe6cf, 1); g.fillRect(mx - s * 0.04, my, s * 0.08, s * 0.2);
+      g.fillStyle(randPick(colors), 1); g.fillEllipse(mx, my, s * 0.28, s * 0.18);
+      g.fillStyle(0xffffff, 0.8); g.fillCircle(mx - s * 0.05, my - s * 0.02, s * 0.03);
+    }
+  },
+};
+
+// ------------------------------------------------------------------ Neon ----
+const neonPylon = {
+  solid: true, rFactor: 0.4, min: 40, max: 56, weight: 3,
+  draw(g, x, y, s) {
+    shadow(g, x, y + s * 0.7, s * 0.7, s * 0.24);
+    g.fillStyle(0x15131f, 1); g.fillRect(x - s * 0.08, y - s * 0.6, s * 0.16, s * 1.3);
+    g.fillStyle(0x00e5ff, 0.95); g.fillRect(x - s * 0.06, y - s * 0.55, s * 0.12, s * 1.15);
+    g.fillStyle(0xff3df0, 0.9); g.fillCircle(x, y - s * 0.6, s * 0.12);
+  },
+};
+
+const neonSign = {
+  solid: true, rFactor: 0.5, min: 34, max: 50, weight: 3,
+  draw(g, x, y, s) {
+    shadow(g, x, y + s * 0.6, s * 0.8, s * 0.24);
+    g.fillStyle(0x1a1730, 1); g.fillRect(x - s * 0.05, y - s * 0.2, s * 0.1, s * 0.8);
+    const col = randPick([0x00e5ff, 0xff3df0, 0x9b6bff, 0xffd23f]);
+    g.fillStyle(0x0e0c1a, 1); g.fillRoundedRect(x - s * 0.5, y - s * 0.6, s, s * 0.5, 6);
+    g.lineStyle(s * 0.06, col, 1); g.strokeRoundedRect(x - s * 0.5, y - s * 0.6, s, s * 0.5, 6);
+    g.fillStyle(col, 0.85); g.fillRect(x - s * 0.34, y - s * 0.46, s * 0.68, s * 0.06);
+    g.fillRect(x - s * 0.34, y - s * 0.3, s * 0.4, s * 0.06);
+  },
+};
+
+const cone = {
+  solid: true, rFactor: 0.4, min: 22, max: 32, weight: 3,
+  draw(g, x, y, s) {
+    shadow(g, x, y + s * 0.45, s * 0.7, s * 0.2);
+    g.fillStyle(0xff6a2c, 1);
+    g.fillTriangle(x - s * 0.35, y + s * 0.4, x + s * 0.35, y + s * 0.4, x, y - s * 0.45);
+    g.fillStyle(0xffffff, 0.95); g.fillRect(x - s * 0.2, y - s * 0.05, s * 0.4, s * 0.1);
+    g.fillStyle(0x3a1a0a, 1); g.fillRect(x - s * 0.4, y + s * 0.4, s * 0.8, s * 0.1);
+  },
+};
+
+const holoPalm = {
+  solid: true, rFactor: 0.35, min: 42, max: 56, weight: 2,
+  draw(g, x, y, s) {
+    shadow(g, x, y + s * 0.7, s * 0.7, s * 0.22);
+    g.fillStyle(0xff3df0, 0.8); g.fillRect(x - s * 0.07, y - s * 0.2, s * 0.14, s * 0.9);
+    g.fillStyle(0x00e5ff, 0.8);
+    const fr = s * 0.7;
+    for (let k = 0; k < 6; k += 1) {
+      const a = -Math.PI / 2 + (k - 2.5) * 0.5;
+      g.fillTriangle(
+        x, y - s * 0.25,
+        x + Math.cos(a) * fr, y - s * 0.25 + Math.sin(a) * fr,
+        x + Math.cos(a + 0.12) * fr, y - s * 0.25 + Math.sin(a + 0.12) * fr,
+      );
+    }
+  },
+};
+
+const gridTile = {
+  solid: false, min: 40, max: 56, weight: 5,
+  draw(g, x, y, s) {
+    g.lineStyle(s * 0.03, 0x2a2455, 0.8);
+    for (let k = -1; k <= 1; k += 1) {
+      g.beginPath(); g.moveTo(x - s * 0.6, y + k * s * 0.3); g.lineTo(x + s * 0.6, y + k * s * 0.3); g.strokePath();
+      g.beginPath(); g.moveTo(x + k * s * 0.3, y - s * 0.6); g.lineTo(x + k * s * 0.3, y + s * 0.6); g.strokePath();
+    }
+    g.fillStyle(0x00e5ff, 0.5); g.fillCircle(x, y, s * 0.05);
+  },
+};
+
 export const THEME_PROPS = {
   Grassy: [tree, bush, rock, sheep, flowers],
   Beach: [palm, umbrella, crab, starfish, shell],
   Ice: [snowman, pine, iceCrystal, penguin, snowPatch],
   Candy: [lollipop, peppermint, gumdrop, iceCream, sprinkles],
+  Volcano: [volcanoRock, charredTree, emberVent, lavaPool, cinders],
+  Storm: [stormRock, deadPine, signPost, puddle, reeds],
+  Jungle: [jungleTree, ruinPillar, idol, vineRock, fern, mushrooms],
+  Neon: [neonPylon, neonSign, cone, holoPalm, gridTile],
   Rainbow: [], // outer space — nothing off-track but the void
 };

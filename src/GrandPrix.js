@@ -19,7 +19,14 @@ export const LAPS = 3; // laps per race
 
 // Overall car-speed setting: slow is 20% slower, fast is 10% faster than medium.
 export const CAR_SPEEDS = { slow: 0.72, medium: 1.0, fast: 1.1 };
-export const ALL_THEMES = ['Grassy', 'Beach', 'Ice', 'Candy'];
+
+// Two cups of four worlds. The Pro Cup is harder (narrower, twistier tracks
+// with punishing per-world physics). Cup index is 1-based in the UI.
+export const CUPS = [
+  { id: 1, name: 'STARTER CUP', sub: 'Friendly & forgiving', themes: ['Grassy', 'Beach', 'Ice', 'Candy'] },
+  { id: 2, name: 'PRO CUP', sub: 'Hazards & harder tracks', themes: ['Volcano', 'Storm', 'Jungle', 'Neon'] },
+];
+export const ALL_THEMES = CUPS[0].themes;
 
 function shuffle(arr) {
   const a = arr.slice();
@@ -33,7 +40,7 @@ function shuffle(arr) {
 // picks: ROSTER (palette) indices the human player(s) chose, in player order.
 // Those become the humans; the 4-kart lineup is filled out with random AI
 // colours from the rest of the palette.
-export function initGrandPrix(registry, playerCount, picks) {
+export function initGrandPrix(registry, playerCount, picks, cup) {
   const chosen = (picks && picks.length ? picks : [0, 1, 2, 3]).slice(0, playerCount);
   const used = new Set(chosen);
   const pool = ROSTER.map((_, i) => i).filter((i) => !used.has(i));
@@ -45,11 +52,13 @@ export function initGrandPrix(registry, playerCount, picks) {
 
   const points = {};
   lineup.forEach((idx) => { points[ROSTER[idx].id] = 0; });
-  const themeOrder = shuffle(ALL_THEMES);
+  const cupIndex = cup === 2 ? 1 : 0;
+  const themeOrder = shuffle(CUPS[cupIndex].themes);
   // Konami-unlocked secret: a 5th race on Rainbow Road, always last.
   if (registry.get('rainbow')) themeOrder.push('Rainbow');
   registry.set('gp', {
     playerCount,
+    cup: CUPS[cupIndex].id,
     raceIndex: 0,
     themeOrder,
     points,

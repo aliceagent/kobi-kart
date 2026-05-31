@@ -2,10 +2,14 @@
 //
 // Background music: chiptune arrangements of famous PUBLIC-DOMAIN melodies
 // (their copyright expired long ago), one per world:
-//   Grassy -> Rossini, William Tell Overture (gallop finale)
-//   Beach  -> Offenbach, Can-Can (Galop Infernal)
-//   Ice    -> Tchaikovsky, Dance of the Sugar Plum Fairy
-//   Candy  -> Fucik, Entry of the Gladiators (circus march)
+//   Grassy  -> Rossini, William Tell Overture (gallop finale)
+//   Beach   -> Offenbach, Can-Can (Galop Infernal)
+//   Ice     -> Tchaikovsky, Dance of the Sugar Plum Fairy
+//   Candy   -> Fucik, Entry of the Gladiators (circus march)
+//   Volcano -> Grieg, In the Hall of the Mountain King (menacing build)
+//   Storm   -> Beethoven, Symphony No. 5 (the famous fate motif)
+//   Jungle  -> Rimsky-Korsakov, Flight of the Bumblebee (frantic buzz)
+//   Neon    -> original synthwave groove (E-minor night drive)
 // Everything is wrapped in try/catch so audio can never break gameplay.
 
 let ctx = null;
@@ -239,6 +243,81 @@ const TRACKS = {
       ['C5', 0.5], ['G4', 0.5], ['C5', 1],
     ],
     bass: rep([['C3', 0.5], ['G3', 0.5]], 24),
+    drum: [['k', 1], ['s', 1]],
+  },
+
+  // Grieg — In the Hall of the Mountain King (B minor, creeping then frantic).
+  Volcano: {
+    bpm: 138, wave: 'sawtooth', bassWave: 'square', staccato: 0.55,
+    melody: [
+      // A — the creeping theme, low
+      ['B3', 0.25], ['C#4', 0.25], ['D4', 0.25], ['E4', 0.25], ['F#4', 0.25], ['D4', 0.25], ['F#4', 0.5],
+      ['F4', 0.25], ['D4', 0.25], ['F4', 0.5], ['E4', 0.25], ['C#4', 0.25], ['E4', 0.5],
+      ['B3', 0.25], ['C#4', 0.25], ['D4', 0.25], ['E4', 0.25], ['F#4', 0.25], ['D4', 0.25], ['F#4', 0.25], ['B4', 0.25],
+      ['A4', 0.25], ['F#4', 0.25], ['D4', 0.25], ['F#4', 0.25], ['A4', 0.5], ['B3', 0.5],
+      // B — same theme an octave up (eruption)
+      ['B4', 0.25], ['C#5', 0.25], ['D5', 0.25], ['E5', 0.25], ['F#5', 0.25], ['D5', 0.25], ['F#5', 0.5],
+      ['F5', 0.25], ['D5', 0.25], ['F5', 0.5], ['E5', 0.25], ['C#5', 0.25], ['E5', 0.5],
+      ['B4', 0.25], ['C#5', 0.25], ['D5', 0.25], ['E5', 0.25], ['F#5', 0.25], ['D5', 0.25], ['F#5', 0.25], ['B5', 0.25],
+      ['A5', 0.25], ['F#5', 0.25], ['D5', 0.25], ['F#5', 0.25], ['B5', 1],
+    ],
+    bass: rep([['B2', 1], ['B2', 1], ['F#2', 1], ['F#2', 1]], 6),
+    drum: [['k', 1], ['s', 1]],
+  },
+
+  // Beethoven — Symphony No. 5 fate motif (C minor, dramatic and stormy).
+  Storm: {
+    bpm: 132, wave: 'square', bassWave: 'square', staccato: 0.5,
+    melody: [
+      // A — the motif and its echo
+      ['G4', 0.25], ['G4', 0.25], ['G4', 0.25], ['D#4', 1],
+      ['F4', 0.25], ['F4', 0.25], ['F4', 0.25], ['D4', 1],
+      ['G4', 0.25], ['G4', 0.25], ['G4', 0.25], ['D#4', 0.5], ['G#4', 0.25], ['G#4', 0.25], ['G#4', 0.25], ['G4', 0.5],
+      ['D#5', 0.25], ['D#5', 0.25], ['D#5', 0.25], ['C5', 0.5], ['D5', 0.25], ['D5', 0.25], ['D5', 0.25], ['B4', 0.5],
+      // B — rising tension
+      ['C5', 0.25], ['C5', 0.25], ['C5', 0.25], ['G#4', 1],
+      ['A#4', 0.25], ['A#4', 0.25], ['A#4', 0.25], ['G4', 1],
+      ['G5', 0.25], ['G5', 0.25], ['G5', 0.25], ['D#5', 1],
+      ['F5', 0.25], ['F5', 0.25], ['F5', 0.25], ['D5', 1],
+      ['C5', 0.5], ['G4', 0.5], ['D#4', 0.5], ['C4', 1],
+    ],
+    bass: rep([['C3', 1], ['C3', 1], ['G2', 1], ['G2', 1], ['G#2', 1], ['G#2', 1], ['G2', 1], ['G2', 1]], 3),
+    drum: [['k', 1], ['s', 1]],
+  },
+
+  // Rimsky-Korsakov — Flight of the Bumblebee (A minor, frantic chromatic buzz).
+  Jungle: {
+    bpm: 150, wave: 'sawtooth', bassWave: 'square', staccato: 0.45,
+    melody: [
+      // A — chromatic descent and climb (the buzzing)
+      ['E5', 0.25], ['D#5', 0.25], ['D5', 0.25], ['C#5', 0.25], ['C5', 0.25], ['B4', 0.25], ['A#4', 0.25], ['A4', 0.25],
+      ['G#4', 0.25], ['A4', 0.25], ['A#4', 0.25], ['B4', 0.25], ['C5', 0.25], ['C#5', 0.25], ['D5', 0.25], ['D#5', 0.25],
+      ['E5', 0.25], ['D#5', 0.25], ['D5', 0.25], ['C#5', 0.25], ['C5', 0.25], ['B4', 0.25], ['A#4', 0.25], ['A4', 0.25],
+      ['G#4', 0.25], ['G4', 0.25], ['F#4', 0.25], ['F4', 0.25], ['E4', 0.5], ['E5', 0.5],
+      // B — buzzing around the nest
+      ['E5', 0.25], ['F5', 0.25], ['E5', 0.25], ['D#5', 0.25], ['E5', 0.25], ['F5', 0.25], ['E5', 0.25], ['D5', 0.25],
+      ['C5', 0.25], ['B4', 0.25], ['A4', 0.25], ['B4', 0.25], ['C5', 0.25], ['D5', 0.25], ['E5', 0.25], ['F5', 0.25],
+      ['G5', 0.25], ['F5', 0.25], ['E5', 0.25], ['D5', 0.25], ['C5', 0.25], ['B4', 0.25], ['A4', 0.25], ['G4', 0.25],
+      ['A4', 0.5], ['E4', 0.5], ['A4', 1],
+    ],
+    bass: rep([['A2', 0.5], ['A2', 0.5], ['E2', 0.5], ['E2', 0.5]], 12),
+    drum: [['k', 1], ['s', 0.5], ['k', 0.5]],
+  },
+
+  // Original synthwave night-drive groove (E minor arpeggios).
+  Neon: {
+    bpm: 128, wave: 'sawtooth', bassWave: 'square', staccato: 0.6,
+    melody: [
+      // A — climbing arpeggios
+      ['E4', 0.25], ['B4', 0.25], ['E5', 0.25], ['G5', 0.25], ['F#5', 0.5], ['B4', 0.25], ['F#5', 0.25], ['E5', 0.5],
+      ['C5', 0.25], ['G4', 0.25], ['C5', 0.25], ['E5', 0.25], ['D5', 0.5], ['G4', 0.25], ['D5', 0.25], ['B4', 0.5],
+      ['A4', 0.25], ['E4', 0.25], ['A4', 0.25], ['C5', 0.25], ['B4', 0.5], ['E4', 0.25], ['B4', 0.25], ['G4', 0.5],
+      ['B4', 0.25], ['D5', 0.25], ['F#5', 0.25], ['B5', 0.25], ['A5', 0.5], ['F#5', 0.5], ['E5', 1],
+      // B — high lead
+      ['E5', 0.25], ['F#5', 0.25], ['G5', 0.25], ['A5', 0.25], ['B5', 0.5], ['A5', 0.25], ['G5', 0.25], ['F#5', 0.5],
+      ['G5', 0.25], ['E5', 0.25], ['B4', 0.25], ['E5', 0.25], ['D5', 0.5], ['B4', 0.5], ['E5', 1],
+    ],
+    bass: rep([['E2', 0.5], ['E2', 0.5], ['C2', 0.5], ['C2', 0.5], ['G2', 0.5], ['G2', 0.5], ['B2', 0.5], ['B2', 0.5]], 4),
     drum: [['k', 1], ['s', 1]],
   },
 

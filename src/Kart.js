@@ -13,6 +13,11 @@ export const TUNE = {
   desertOffRoadMax: 85,
   desertOffRoadBoostSpeed: 150,
   desertItemBoostOffRoadSpeed: 210,
+  // Jungle mud is the heaviest off-road surface — even slower than sand.
+  mudOffRoadMax: 70,
+  mudOffRoadBoostSpeed: 120,
+  mudItemBoostOffRoadSpeed: 180,
+  padBoostSpeed: 470, // boost pads / speed strips (between meter-boost and item-boost)
   accel: 260,
   brakeDecel: 440,
   overspeedDecel: 650,
@@ -57,6 +62,7 @@ export default class Kart {
     this.spinTimer = 0;
     this.shieldTimer = 0;
     this.itemBoostTimer = 0;
+    this.padBoostTimer = 0; // brief boost from a speed strip / boost pad
     this.heldItem = null;
     this.stuckTimer = 0; // time spent wedged off-track (for auto-rescue)
     this.falling = false; // falling off Rainbow Road into space
@@ -95,11 +101,16 @@ export default class Kart {
     return true;
   }
 
-  drive(dt, steer, braking, wantBoost, onRoad, slippery = false, desert = false) {
+  // terrain describes the surface under the kart this frame:
+  //   { offRoad: 'grass'|'sand'|'ice'|'mud'|'fatal', grip: <=1, capMul: <=1 }
+  // grip < 1 reduces traction (wet roads slide); off-road 'ice' is the slickest.
+  // capMul shaves the speed cap (on-road mud slow-patches).
+  drive(dt, steer, braking, wantBoost, onRoad, terrain = {}) {
     this.prevX = this.x;
     this.prevY = this.y;
 
     if (this.itemBoostTimer > 0) this.itemBoostTimer -= dt;
+    if (this.padBoostTimer > 0) this.padBoostTimer -= dt;
     if (this.shieldTimer > 0) this.shieldTimer -= dt;
 
     const decay = Math.exp(-TUNE.knockbackDecay * dt);
@@ -141,15 +152,28 @@ export default class Kart {
       }
     }
 
+    // Off-road speed caps depend on the surface type (mud slowest, then sand).
+    const offType = terrain.offRoad || 'grass';
+    let offMax = TUNE.offRoadMax;
+    let offBoost = TUNE.offRoadBoostSpeed;
+    let offItem = TUNE.itemBoostOffRoadSpeed;
+    if (offType === 'sand') {
+      offMax = TUNE.desertOffRoadMax; offBoost = TUNE.desertOffRoadBoostSpeed; offItem = TUNE.desertItemBoostOffRoadSpeed;
+    } else if (offType === 'mud') {
+      offMax = TUNE.mudOffRoadMax; offBoost = TUNE.mudOffRoadBoostSpeed; offItem = TUNE.mudItemBoostOffRoadSpeed;
+    }
+
     let cap;
     if (this.itemBoostTimer > 0) {
-      cap = onRoad ? TUNE.itemBoostSpeed : (desert ? TUNE.desertItemBoostOffRoadSpeed : TUNE.itemBoostOffRoadSpeed);
+      cap = onRoad ? TUNE.itemBoostSpeed : offItem;
+    } else if (this.padBoostTimer > 0) {
+      cap = onRoad ? TUNE.padBoostSpeed : offBoost;
     } else if (this.boosting) {
-      cap = onRoad ? TUNE.boostSpeed : (desert ? TUNE.desertOffRoadBoostSpeed : TUNE.offRoadBoostSpeed);
+      cap = onRoad ? TUNE.boostSpeed : offBoost;
     } else {
-      cap = onRoad ? TUNE.maxSpeed : (desert ? TUNE.desertOffRoadMax : TUNE.offRoadMax);
+      cap = onRoad ? TUNE.maxSpeed : offMax;
     }
-    cap *= this.speedMul * this.speedScale;
+    cap *= this.speedMul * this.speedScale * (terrain.capMul || 1);
 
     if (braking) {
       // Brake to a stop, then back up slowly while still held.
@@ -159,21 +183,27 @@ export default class Kart {
     }
     if (this.speed > cap) this.speed = Math.max(cap, this.speed - TUNE.overspeedDecel * dt);
 
+    // Grip: low off-road ice is the slickest; otherwise a wet road's grip
+    // (terrain.grip < 1) applies everywhere on that world. 1 = full traction.
+    let grip;
+    if (!onRoad && offType === 'ice') grip = TUNE.iceGrip;
+    else grip = terrain.grip != null ? terrain.grip : 1;
+    const lowGrip = grip < 0.2; // ice-level: twitchy steering so the tail swings
+
     // Steering works forwards and in reverse (use speed magnitude).
     const turnFactor = Math.max(
       TUNE.minTurnFactor,
       Phaser.Math.Clamp(Math.abs(this.speed) / TUNE.minTurnSpeed, 0, 1)
     );
     let turnRate = braking ? TUNE.driftTurnRate : TUNE.turnRate;
-    if (slippery) turnRate *= TUNE.slipTurnMul; // twitchy on ice
+    if (lowGrip) turnRate *= TUNE.slipTurnMul; // twitchy on ice
     this.heading += steer * turnRate * turnFactor * dt;
 
     // The engine pushes along the heading; grip pulls actual velocity toward
-    // that. Full grip (1) snaps instantly (normal handling); low grip on ice
-    // lets velocity lag the heading, so the kart slides and fishtails.
+    // that. Full grip (1) snaps instantly (normal handling); low grip lets
+    // velocity lag the heading, so the kart slides and fishtails.
     const fwdX = Math.cos(this.heading) * this.speed;
     const fwdY = Math.sin(this.heading) * this.speed;
-    const grip = slippery ? TUNE.iceGrip : 1;
     this.vx += (fwdX - this.vx) * grip;
     this.vy += (fwdY - this.vy) * grip;
 

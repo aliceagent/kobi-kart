@@ -13,6 +13,7 @@ export default class CharacterSelectScene extends Phaser.Scene {
 
   init(data) {
     this.playerCount = (data && data.playerCount) || 1;
+    this.cup = (data && data.cup) || 1;
   }
 
   create() {
@@ -134,7 +135,7 @@ export default class CharacterSelectScene extends Phaser.Scene {
   }
 
   start() {
-    initGrandPrix(this.registry, this.playerCount, this.picks);
+    initGrandPrix(this.registry, this.playerCount, this.picks, this.cup);
     this.cameras.main.flash(250, 255, 255, 255);
     this.time.delayedCall(260, () => this.scene.start('RaceScene'));
   }

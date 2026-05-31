@@ -8,18 +8,28 @@
 // instead of a plain blob. Candidates are validated (no self-intersection, no
 // self-merging of the road) and regenerated until one is clean.
 
+// Each theme carries its palette plus physics flags read by RaceScene:
+//   offRoad: grass | sand | ice | mud | fatal   (how leaving the road behaves)
+//   grip:    on-road traction (1 = dry; < 1 = wet/slick)
+//   wind:    lateral gust strength (px/s)
+//   boostPads/slowPatches/oilPatches/lowVis: on-road features
+//   hazard:  lightning | geyser | null   (timed telegraphed hazards)
+//   hard:    tighter/narrower generation; roadWidth overrides the default
+const DEFAULT_ROAD_WIDTH = 143;
 export const THEMES = [
-  { name: 'Grassy', terrain: 0x7ec850, road: 0x4a4a55, edge: 0xffffff, deco: 0x4e9a3a, decoAlt: 0x6fc24a },
-  { name: 'Beach', terrain: 0xf3e1a6, road: 0x70747f, edge: 0xffffff, deco: 0x2fa39a, decoAlt: 0x57d6c4 },
-  { name: 'Ice', terrain: 0xdfeefb, road: 0x8fa9c4, edge: 0xffffff, deco: 0xa9d3f5, decoAlt: 0xffffff },
-  { name: 'Candy', terrain: 0xffc1e3, road: 0x9b6bce, edge: 0xffffff, deco: 0xff5fa2, decoAlt: 0xfff04d },
-  // Secret Rainbow Road (outer space). Road is drawn as a rainbow at render
-  // time; terrain is the starfield void you fall into.
-  { name: 'Rainbow', terrain: 0x0a0a1f, road: 0x222244, edge: 0xffffff, deco: 0xffffff, decoAlt: 0x9fd6f5 },
+  // --- Starter Cup ---
+  { name: 'Grassy', terrain: 0x7ec850, road: 0x4a4a55, edge: 0xffffff, deco: 0x4e9a3a, decoAlt: 0x6fc24a, offRoad: 'grass' },
+  { name: 'Beach', terrain: 0xf3e1a6, road: 0x70747f, edge: 0xffffff, deco: 0x2fa39a, decoAlt: 0x57d6c4, offRoad: 'sand' },
+  { name: 'Ice', terrain: 0xdfeefb, road: 0x8fa9c4, edge: 0xffffff, deco: 0xa9d3f5, decoAlt: 0xffffff, offRoad: 'ice' },
+  { name: 'Candy', terrain: 0xffc1e3, road: 0x9b6bce, edge: 0xffffff, deco: 0xff5fa2, decoAlt: 0xfff04d, offRoad: 'grass' },
+  // --- Pro Cup ---
+  { name: 'Volcano', terrain: 0x7a1f08, road: 0x2f2b2b, edge: 0xffb24d, deco: 0x1c1a1a, decoAlt: 0xff7a1a, offRoad: 'fatal', boostPads: true, hazard: 'geyser', hard: true, roadWidth: 120 },
+  { name: 'Storm', terrain: 0x39434b, road: 0x44474f, edge: 0xcfe0ee, deco: 0x2b3640, decoAlt: 0x8fa6b4, offRoad: 'grass', grip: 0.55, wind: 130, hazard: 'lightning', hard: true, roadWidth: 126 },
+  { name: 'Jungle', terrain: 0x2f6b2e, road: 0x5a5048, edge: 0xe0d2a0, deco: 0x1c4a1b, decoAlt: 0x6abf3a, offRoad: 'mud', slowPatches: true, hard: true, roadWidth: 118 },
+  { name: 'Neon', terrain: 0x110f1e, road: 0x1d1b30, edge: 0x00e5ff, deco: 0xff3df0, decoAlt: 0x9b6bff, offRoad: 'grass', boostPads: true, oilPatches: true, lowVis: true, hard: true, roadWidth: 128 },
+  // Secret Rainbow Road (outer space): drawn as a rainbow; off-road is the void.
+  { name: 'Rainbow', terrain: 0x0a0a1f, road: 0x222244, edge: 0xffffff, deco: 0xffffff, decoAlt: 0x9fd6f5, offRoad: 'fatal' },
 ];
-
-const ROAD_WIDTH = 143; // 10% wider
-const HALF_WIDTH = ROAD_WIDTH / 2;
 
 function randFloat(min, max) {
   return min + Math.random() * (max - min);
@@ -331,11 +341,13 @@ function buildRails(centerline, halfWidth) {
   return rails;
 }
 
-function tryGenerate(width, height) {
-  const margin = HALF_WIDTH + 140;
+function tryGenerate(width, height, halfWidth, roadWidth, hard) {
+  const margin = halfWidth + 140;
   const bounds = { minX: margin, minY: margin, maxX: width - margin, maxY: height - margin };
 
-  const count = randInt(14, 20);
+  // Hard tracks pack in more corners: more control points, bigger fine wiggles
+  // and tighter point separation so the racing line winds more.
+  const count = hard ? randInt(16, 22) : randInt(14, 20);
   const points = [];
   for (let i = 0; i < count; i += 1) {
     points.push({ x: randFloat(bounds.minX, bounds.maxX), y: randFloat(bounds.minY, bounds.maxY) });
@@ -344,35 +356,35 @@ function tryGenerate(width, height) {
   let pts = convexHull(points);
   if (pts.length < 6) return null;
 
-  pushApart(pts, 420, 14, bounds);
-  pts = displaceMidpoints(pts, 300); // coarse turns (both directions)
-  pushApart(pts, 230, 12, bounds);
-  pts = displaceMidpoints(pts, 150); // finer wiggles → longer, busier route
-  pushApart(pts, 130, 8, bounds);
+  pushApart(pts, hard ? 360 : 420, 14, bounds);
+  pts = displaceMidpoints(pts, hard ? 340 : 300); // coarse turns (both directions)
+  pushApart(pts, hard ? 195 : 230, 12, bounds);
+  pts = displaceMidpoints(pts, hard ? 190 : 150); // finer wiggles → longer, busier route
+  pushApart(pts, hard ? 108 : 130, 8, bounds);
 
   // Validate the smoothed loop, not just the control polygon.
   let centerline = sampleClosedSpline(pts, 8);
   if (selfIntersects(centerline)) return null;
-  if (roadSelfMerges(centerline, ROAD_WIDTH * 1.35)) return null;
+  if (roadSelfMerges(centerline, roadWidth * 1.35)) return null;
   centerline = rotateToStraight(centerline);
 
   return {
     centerline,
-    roadWidth: ROAD_WIDTH,
-    halfWidth: HALF_WIDTH,
-    rails: buildRails(centerline, HALF_WIDTH),
+    roadWidth,
+    halfWidth,
+    rails: buildRails(centerline, halfWidth),
     start: startPose(centerline),
   };
 }
 
 // Guaranteed-valid fallback if every random attempt is rejected.
-function fallbackTrack(width, height) {
+function fallbackTrack(width, height, halfWidth, roadWidth, hard) {
   const cx = width / 2;
   const cy = height / 2;
-  const rx = cx - (HALF_WIDTH + 160);
-  const ry = cy - (HALF_WIDTH + 160);
+  const rx = cx - (halfWidth + 160);
+  const ry = cy - (halfWidth + 160);
   const ctrl = [];
-  const n = 9;
+  const n = hard ? 11 : 9;
   for (let i = 0; i < n; i += 1) {
     const ang = (i / n) * Math.PI * 2;
     const r = 0.7 + 0.3 * Math.sin(ang * 3); // gentle in/out variation
@@ -381,21 +393,24 @@ function fallbackTrack(width, height) {
   const centerline = rotateToStraight(sampleClosedSpline(ctrl, 12));
   return {
     centerline,
-    roadWidth: ROAD_WIDTH,
-    halfWidth: HALF_WIDTH,
-    rails: buildRails(centerline, HALF_WIDTH),
+    roadWidth,
+    halfWidth,
+    rails: buildRails(centerline, halfWidth),
     start: startPose(centerline),
   };
 }
 
 export function generateTrack(width, height, themeName) {
-  let base = null;
-  for (let attempt = 0; attempt < 80 && !base; attempt += 1) {
-    base = tryGenerate(width, height);
-  }
-  if (!base) base = fallbackTrack(width, height);
   const theme = themeName
     ? THEMES.find((t) => t.name === themeName) || THEMES[0]
     : THEMES[randInt(0, THEMES.length - 1)];
+  const roadWidth = theme.roadWidth || DEFAULT_ROAD_WIDTH;
+  const halfWidth = roadWidth / 2;
+  const hard = !!theme.hard;
+  let base = null;
+  for (let attempt = 0; attempt < 80 && !base; attempt += 1) {
+    base = tryGenerate(width, height, halfWidth, roadWidth, hard);
+  }
+  if (!base) base = fallbackTrack(width, height, halfWidth, roadWidth, hard);
   return { ...base, theme };
 }

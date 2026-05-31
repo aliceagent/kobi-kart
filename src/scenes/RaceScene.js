@@ -57,8 +57,20 @@ export default class RaceScene extends Phaser.Scene {
     this.theme = track.theme;
     this.start = track.start;
     this.isRainbow = this.theme.name === 'Rainbow';
-    // Rainbow Road floats in space — no guard rails (you fall off instead).
-    this.rails = this.isRainbow ? [] : track.rails;
+    this.fatalOffRoad = this.theme.offRoad === 'fatal'; // leaving the road = fall + respawn
+    this.lowVis = !!this.theme.lowVis; // Neon: tighter camera + vignette
+    // Worlds with a fatal void (Rainbow, Volcano) have no guard rails — you fall.
+    this.rails = this.fatalOffRoad ? [] : track.rails;
+
+    // Per-world road features / hazards (filled by drawTrack + createHazards).
+    this.boostPads = [];
+    this.oilPatches = [];
+    this.slowPatches = [];
+    this.geysers = [];
+    this.lightning = null;
+    this.windPhase = 0;
+    this.windX = 0;
+    this.windY = 0;
 
     makeGameTextures(this);
     ROSTER.forEach((r) => makeKartTexture(this, `kart_${r.id}`, r.color, r.trim));
@@ -66,6 +78,8 @@ export default class RaceScene extends Phaser.Scene {
     this.trackGfx = this.drawTrack();
     this.createRacers();
     this.createItemBoxes();
+    this.createHazards();
+    this.hazardGfx = this.add.graphics().setDepth(13); // telegraphs + eruptions + bolts
 
     this.projectiles = [];
     this.traps = [];
@@ -268,7 +282,7 @@ export default class RaceScene extends Phaser.Scene {
   // and barely moving for a couple seconds, pop them back onto the racing line.
   rescueIfStuck(kart, dt) {
     if (kart.finished || kart.falling) { kart.stuckTimer = 0; return; }
-    if (this.isRainbow) return; // Rainbow Road handles off-track via falling
+    if (this.fatalOffRoad) return; // fatal-void worlds handle off-track via falling
     if (Math.abs(kart.speed) < 45 && !this.isOnRoad(kart.x, kart.y)) {
       kart.stuckTimer += dt;
       if (kart.stuckTimer > 2.5) {
@@ -654,11 +668,13 @@ export default class RaceScene extends Phaser.Scene {
       minX = Math.min(minX, k.x); maxX = Math.max(maxX, k.x);
       minY = Math.min(minY, k.y); maxY = Math.max(maxY, k.y);
     }
-    const pad = 300;
+    // Low-visibility worlds (Neon) pull the camera in tight.
+    const pad = this.lowVis ? 150 : 300;
     minX -= pad; maxX += pad; minY -= pad; maxY += pad;
+    const maxZoom = this.lowVis ? (view.length > 1 ? 1.3 : 1.55) : (view.length > 1 ? 1.1 : 0.95);
     const targetZoom = Phaser.Math.Clamp(
       Math.min(cam.width / (maxX - minX), cam.height / (maxY - minY)),
-      this.minZoom, view.length > 1 ? 1.1 : 0.95
+      this.minZoom, maxZoom
     );
     const t = 1 - Math.exp(-6 * dt);
     cam.setZoom(Phaser.Math.Linear(cam.zoom, targetZoom, t));
@@ -711,8 +727,11 @@ export default class RaceScene extends Phaser.Scene {
 
     this.raceElapsed += dt;
     this.applyRubberBand();
-    if (this.isRainbow) this.racers.forEach((r) => this.updateFall(r, dt));
+    if (this.fatalOffRoad) this.racers.forEach((r) => this.updateFall(r, dt));
+    this.updateWind(dt);
     this.racers.forEach((r) => this.driveRacer(r, dt, false));
+    this.racers.forEach((r) => this.applyRoadFeatures(r));
+    this.updateHazards(dt);
 
     // Collisions among all racers (falling karts are intangible).
     for (let i = 0; i < this.racers.length; i += 1) {
@@ -785,6 +804,128 @@ export default class RaceScene extends Phaser.Scene {
     }
   }
 
+  // --------------------------------------------------------- wind + hazards ---
+  // Storm: a gusting crosswind whose strength swells/fades and direction wanders.
+  updateWind(dt) {
+    if (!this.theme.wind) { this.windX = 0; this.windY = 0; return; }
+    this.windPhase += dt;
+    const gust = 0.55 + 0.45 * Math.sin(this.windPhase * 0.9); // 0.1 .. 1.0
+    const dir = Math.PI * 0.5 + Math.sin(this.windPhase * 0.25) * 0.8; // mostly sideways, wandering
+    const mag = this.theme.wind * gust;
+    this.windX = Math.cos(dir) * mag;
+    this.windY = Math.sin(dir) * mag;
+  }
+
+  createHazards() {
+    if (this.theme.hazard === 'geyser') this.createGeysers();
+    if (this.theme.hazard === 'lightning') this.lightning = { timer: 2.6, strike: null };
+  }
+
+  // Volcano: lava geysers sit just off the racing line and erupt on a stagger.
+  createGeysers() {
+    const cl = this.centerline;
+    const n = cl.length;
+    const count = 7;
+    for (let i = 0; i < count; i += 1) {
+      const frac = 0.1 + ((i + 0.5) / count) * 0.8; // skip the start grid
+      const idx = Math.round(frac * n) % n;
+      const p = cl[idx];
+      const pn = cl[(idx + 1) % n];
+      let tx = pn.x - p.x; let ty = pn.y - p.y;
+      const tl = Math.hypot(tx, ty) || 1; tx /= tl; ty /= tl;
+      const nx = -ty; const ny = tx;
+      const side = (i % 2) ? 1 : -1;
+      const off = this.halfWidth * 0.5 * side; // sit to one side so the far lane stays threadable
+      this.geysers.push({ x: p.x + nx * off, y: p.y + ny * off, r: 36, t: (i * 0.9) % 4.65, phase: 'idle' });
+    }
+  }
+
+  updateHazards(dt) {
+    const g = this.hazardGfx;
+    if (g) g.clear();
+    else return;
+
+    // Geysers: idle (a dark vent) -> warn (growing telegraph) -> erupt (damage).
+    const IDLE = 2.6; const WARN = 1.1; const ERUPT = 0.95; const CYCLE = IDLE + WARN + ERUPT;
+    for (const gy of this.geysers) {
+      gy.t = (gy.t + dt) % CYCLE;
+      if (gy.t < IDLE) {
+        gy.phase = 'idle';
+        g.fillStyle(0x1a0d07, 0.9); g.fillCircle(gy.x, gy.y, gy.r * 0.5);
+        g.fillStyle(0x3a1a0a, 0.85); g.fillCircle(gy.x, gy.y, gy.r * 0.32);
+      } else if (gy.t < IDLE + WARN) {
+        gy.phase = 'warn';
+        const k = (gy.t - IDLE) / WARN;
+        g.fillStyle(0xff7a1a, 0.18 + 0.25 * k); g.fillCircle(gy.x, gy.y, gy.r * (0.5 + 0.5 * k));
+        g.lineStyle(2.5, 0xffd23f, 0.55 + 0.35 * Math.sin(this.elapsed * 30)); g.strokeCircle(gy.x, gy.y, gy.r);
+      } else {
+        gy.phase = 'erupt';
+        const wob = 0.9 + 0.1 * Math.sin(this.elapsed * 40);
+        g.fillStyle(0xff3b00, 0.85); g.fillCircle(gy.x, gy.y, gy.r * wob);
+        g.fillStyle(0xffd23f, 0.9); g.fillCircle(gy.x, gy.y, gy.r * 0.55);
+        for (const r of this.racers) {
+          if (r.finished || r.falling || r.spunOut) continue;
+          if ((r.x - gy.x) ** 2 + (r.y - gy.y) ** 2 < (gy.r + r.radius) ** 2 && r.hit()) {
+            r.knockX += (r.x - gy.x) * 3; r.knockY += (r.y - gy.y) * 3;
+            this.burst(r.x, r.y, 0xff7a1a);
+            if (!r.isAI) Audio.sfx('hit');
+          }
+        }
+      }
+    }
+
+    // Lightning: wait -> telegraph a locked spot for ~1.2s -> strike (spin-out).
+    if (this.lightning) {
+      const L = this.lightning;
+      if (!L.strike) {
+        L.timer -= dt;
+        if (L.timer <= 0) {
+          const live = this.racers.filter((r) => !r.finished && !r.falling);
+          const tk = live.length ? live[Math.floor(Math.random() * live.length)] : null;
+          L.strike = { x: tk ? tk.x : WORLD_W / 2, y: tk ? tk.y : WORLD_H / 2, warn: 1.2, flash: 0, r: 62 };
+        }
+      } else {
+        const s = L.strike;
+        if (s.warn > 0) {
+          s.warn -= dt;
+          const k = 1 - s.warn / 1.2;
+          g.lineStyle(3, 0xcfe0ee, 0.6 + 0.4 * Math.sin(this.elapsed * 30));
+          g.strokeCircle(s.x, s.y, s.r * (1.7 - 0.7 * k));
+          g.lineStyle(2, 0xffffff, 0.5); g.strokeCircle(s.x, s.y, s.r);
+          if (s.warn <= 0) {
+            s.flash = 0.3;
+            this.cameras.main.flash(140, 210, 225, 255);
+            Audio.sfx('hit');
+            for (const r of this.racers) {
+              if (r.finished || r.falling) continue;
+              if ((r.x - s.x) ** 2 + (r.y - s.y) ** 2 < (s.r + r.radius) ** 2) r.hit();
+            }
+            this.burst(s.x, s.y, 0xffffff);
+          }
+        } else {
+          s.flash -= dt;
+          g.fillStyle(0xffffff, Math.max(0, s.flash / 0.3) * 0.6); g.fillCircle(s.x, s.y, s.r);
+          this.drawBolt(g, s.x, s.y);
+          if (s.flash <= 0) { L.strike = null; L.timer = 2.2 + Math.random() * 1.8; }
+        }
+      }
+    }
+  }
+
+  drawBolt(g, x, y) {
+    g.lineStyle(4, 0xffffff, 0.95);
+    g.beginPath();
+    const top = y - 340;
+    g.moveTo(x, top);
+    const segs = 6;
+    for (let i = 1; i <= segs; i += 1) {
+      const ny = top + (340 * i) / segs;
+      const nx = x + Math.sin(i * 1.7) * 20 * (1 - i / segs);
+      g.lineTo(nx, ny);
+    }
+    g.strokePath();
+  }
+
   driveRacer(kart, dt, finishedMode) {
     if (kart.falling) return; // tumbling through space — no control
     let input;
@@ -815,9 +956,51 @@ export default class RaceScene extends Phaser.Scene {
     if (kart.isAI && kart.heldItem && !kart.spunOut && Math.random() < this.aiCfg.itemChance) this.useItem(kart);
 
     const onRoad = this.isOnRoad(kart.x, kart.y);
-    const slippery = !onRoad && this.theme.name === 'Ice'; // off-road ice is slick
-    const desert = !onRoad && this.theme.name === 'Beach'; // off-road sand is heavy/slow
-    kart.drive(dt, input.steer, input.braking, input.boosting, onRoad, slippery, desert);
+    kart.drive(dt, input.steer, input.braking, input.boosting, onRoad, this.terrainFor(kart, onRoad));
+    // Crosswind shoves the kart sideways (Storm).
+    if ((this.windX || this.windY) && !kart.falling) {
+      kart.x += this.windX * dt;
+      kart.y += this.windY * dt;
+    }
+  }
+
+  // Surface descriptor for the kart this frame: off-road type, on-road grip
+  // (wet worlds slide), and a cap multiplier for on-road mud slow-patches.
+  terrainFor(kart, onRoad) {
+    const t = this.theme;
+    const terrain = {
+      offRoad: t.offRoad || 'grass',
+      grip: t.grip != null ? t.grip : 1,
+      capMul: 1,
+    };
+    if (onRoad && this.slowPatches.length) {
+      for (const s of this.slowPatches) {
+        if ((kart.x - s.x) ** 2 + (kart.y - s.y) ** 2 < s.r * s.r) { terrain.capMul = 0.5; break; }
+      }
+    }
+    return terrain;
+  }
+
+  // Boost pads / speed strips give a brief boost; oil slicks spin you out.
+  applyRoadFeatures(kart) {
+    if (kart.finished || kart.falling || kart.spunOut) return;
+    if (this.boostPads.length) {
+      for (const pad of this.boostPads) {
+        if ((kart.x - pad.x) ** 2 + (kart.y - pad.y) ** 2 < pad.r * pad.r) {
+          if (kart.padBoostTimer <= 0) { this.burst(pad.x, pad.y, pad.tint); if (!kart.isAI) Audio.sfx('boost'); }
+          kart.padBoostTimer = Math.max(kart.padBoostTimer, 0.45);
+          break;
+        }
+      }
+    }
+    if (this.oilPatches.length) {
+      for (const oil of this.oilPatches) {
+        if ((kart.x - oil.x) ** 2 + (kart.y - oil.y) ** 2 < oil.r * oil.r) {
+          if (kart.hit()) { this.burst(kart.x, kart.y, 0x2a2440); if (!kart.isAI) Audio.sfx('hit'); }
+          break;
+        }
+      }
+    }
   }
 
   computeOrder() {
@@ -865,6 +1048,7 @@ export default class RaceScene extends Phaser.Scene {
 
     this.drawThickLoop(g, this.centerline, this.roadWidth + 12, t.edge);
     this.drawThickLoop(g, this.centerline, this.roadWidth, t.road);
+    this.placeRoadFeatures(g);
     this.drawStartLine(g);
     this.drawRails(g);
     this.placeProps(g);
@@ -970,7 +1154,12 @@ export default class RaceScene extends Phaser.Scene {
     const solids = all.filter((p) => p.solid);
     const flats = all.filter((p) => !p.solid);
     const placed = [];
-    this.placePropGroup(g, solids, 16, placed);
+    // Jungle is the most cluttered world; fatal-void worlds skip solids
+    // (you fall before ever reaching an off-road obstacle).
+    let solidTarget = 16;
+    if (this.theme.name === 'Jungle') solidTarget = 28;
+    else if (this.fatalOffRoad) solidTarget = 0;
+    this.placePropGroup(g, solids, solidTarget, placed);
     this.placePropGroup(g, flats, 26, placed);
   }
 
@@ -1002,5 +1191,85 @@ export default class RaceScene extends Phaser.Scene {
       if (prop.solid) this.obstacles.push({ x, y, radius: collR });
       count += 1;
     }
+  }
+
+  // ---------------------------------------------------- per-world features ----
+  // Boost pads / speed strips, oil slicks, and mud slow-patches, laid along the
+  // racing line and drawn onto the road. They feed driveRacer/applyRoadFeatures.
+  placeRoadFeatures(g) {
+    const cl = this.centerline;
+    const n = cl.length;
+    const at = (frac, side, offFrac) => {
+      const idx = Math.round(frac * n) % n;
+      const p = cl[idx];
+      const pn = cl[(idx + 1) % n];
+      let tx = pn.x - p.x; let ty = pn.y - p.y;
+      const tl = Math.hypot(tx, ty) || 1; tx /= tl; ty /= tl;
+      const nx = -ty; const ny = tx;
+      return { x: p.x + nx * side * this.halfWidth * offFrac, y: p.y + ny * side * this.halfWidth * offFrac, tx, ty };
+    };
+
+    if (this.theme.boostPads) {
+      const tint = this.theme.name === 'Neon' ? 0x00e5ff : 0xff7a1a;
+      const count = 9;
+      for (let i = 0; i < count; i += 1) {
+        const frac = 0.1 + ((i + 0.5) / count) * 0.8;
+        const side = (i % 3 === 0) ? 0 : ((i % 2) ? 1 : -1);
+        const pad = at(frac, side, 0.4);
+        pad.r = 30; pad.tint = tint;
+        this.boostPads.push(pad);
+        this.drawBoostPad(g, pad, tint);
+      }
+    }
+
+    if (this.theme.oilPatches) {
+      const count = 8;
+      for (let i = 0; i < count; i += 1) {
+        const frac = 0.13 + ((i + 0.3) / count) * 0.8;
+        const o = at(frac, (i % 2) ? -1 : 1, 0.5);
+        o.r = 26;
+        this.oilPatches.push(o);
+        this.drawOilPatch(g, o);
+      }
+    }
+
+    if (this.theme.slowPatches) {
+      const count = 11;
+      for (let i = 0; i < count; i += 1) {
+        const frac = 0.1 + ((i + 0.5) / count) * 0.82;
+        const s = at(frac, (i % 2) ? 1 : -1, 0.35);
+        s.r = 30;
+        this.slowPatches.push(s);
+        this.drawSlowPatch(g, s);
+      }
+    }
+  }
+
+  drawBoostPad(g, pad, tint) {
+    const { x, y, tx, ty } = pad;
+    const nx = -ty; const ny = tx;
+    g.fillStyle(0x0a0a12, 0.55); g.fillCircle(x, y, pad.r);
+    g.fillStyle(tint, 0.95);
+    for (let c = 0; c < 2; c += 1) {
+      const bx = x + tx * (c * 13 - 9);
+      const by = y + ty * (c * 13 - 9);
+      g.fillTriangle(
+        bx - nx * 15 - tx * 7, by - ny * 15 - ty * 7,
+        bx + nx * 15 - tx * 7, by + ny * 15 - ty * 7,
+        bx + tx * 11, by + ty * 11,
+      );
+    }
+  }
+
+  drawOilPatch(g, o) {
+    g.fillStyle(0x05040a, 0.85); g.fillCircle(o.x, o.y, o.r);
+    g.fillStyle(0x3a2d6b, 0.5); g.fillCircle(o.x - o.r * 0.25, o.y - o.r * 0.2, o.r * 0.5);
+    g.fillStyle(0x6f4fb0, 0.4); g.fillCircle(o.x + o.r * 0.2, o.y + o.r * 0.15, o.r * 0.35);
+  }
+
+  drawSlowPatch(g, s) {
+    g.fillStyle(0x3a2a16, 0.85); g.fillCircle(s.x, s.y, s.r);
+    g.fillStyle(0x55401f, 0.7); g.fillCircle(s.x - s.r * 0.3, s.y + s.r * 0.2, s.r * 0.55);
+    g.fillStyle(0x241809, 0.6); g.fillCircle(s.x + s.r * 0.25, s.y - s.r * 0.25, s.r * 0.4);
   }
 }

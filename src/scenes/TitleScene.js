@@ -230,6 +230,6 @@ export default class TitleScene extends Phaser.Scene {
 
   startGame(count) {
     Audio.resumeAudio();
-    this.scene.start('CharacterSelectScene', { playerCount: count });
+    this.scene.start('CupSelectScene', { playerCount: count });
   }
 }
