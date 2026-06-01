@@ -993,10 +993,18 @@ export default class RaceScene extends Phaser.Scene {
         }
       }
     }
-    if (this.oilPatches.length) {
+    // Oil slicks spin you out — but only once per pass. After a hit the kart is
+    // briefly immune and gets a shove along its travel direction, so it slides
+    // off the slick instead of stopping dead on it and re-triggering forever.
+    if (this.oilPatches.length && kart.oilImmune <= 0) {
       for (const oil of this.oilPatches) {
         if ((kart.x - oil.x) ** 2 + (kart.y - oil.y) ** 2 < oil.r * oil.r) {
           if (kart.hit()) { this.burst(kart.x, kart.y, 0x2a2440); if (!kart.isAI) Audio.sfx('hit'); }
+          const sp = Math.hypot(kart.vx, kart.vy);
+          const dx = sp > 20 ? kart.vx / sp : Math.cos(kart.heading);
+          const dy = sp > 20 ? kart.vy / sp : Math.sin(kart.heading);
+          kart.knockX += dx * 170; kart.knockY += dy * 170;
+          kart.oilImmune = 2.6;
           break;
         }
       }
