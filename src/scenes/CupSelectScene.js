@@ -169,15 +169,30 @@ export default class CupSelectScene extends Phaser.Scene {
     return { cup, index, container: c, border, hint, w, h, badge, targetScale: 1 };
   }
 
+  // A mini top-down racetrack tile: a road loop on the world's terrain, with
+  // edge lines and a tiny start/finish checker — using that world's real colours.
   drawSwatch(c, x, y, themeName) {
     const t = THEMES.find((th) => th.name === themeName) || THEMES[0];
     const s = 18;
     const g = this.add.graphics();
+    // Terrain tile (also the infield once the loop is drawn over it).
     g.fillStyle(t.terrain, 1); g.fillRoundedRect(x - s, y - s, s * 2, s * 2, 6);
-    // road band across the middle, with edge lines
-    g.fillStyle(t.edge, 0.9); g.fillRect(x - s, y - 8, s * 2, 16);
-    g.fillStyle(t.road, 1); g.fillRect(x - s, y - 6, s * 2, 12);
-    g.lineStyle(2, 0xffffff, 0.55); g.strokeRoundedRect(x - s, y - s, s * 2, s * 2, 6);
+
+    // Oval loop: an edge ring, then the road ring on top (edge peeks out 2px).
+    const ow = 26; const oh = 21; // ellipse diameters
+    g.lineStyle(11, t.edge, 1); g.strokeEllipse(x, y, ow, oh);
+    g.lineStyle(7, t.road, 1); g.strokeEllipse(x, y, ow, oh);
+
+    // Start/finish checker across the top of the loop.
+    const sy = y - oh / 2 - 4;
+    for (let col = 0; col < 2; col += 1) {
+      for (let row = 0; row < 4; row += 1) {
+        g.fillStyle((col + row) % 2 ? 0x101014 : 0xffffff, 1);
+        g.fillRect(x - 2 + col * 2, sy + row * 2, 2, 2);
+      }
+    }
+
+    g.lineStyle(2, 0xffffff, 0.6); g.strokeRoundedRect(x - s, y - s, s * 2, s * 2, 6);
     c.add(g);
   }
 
