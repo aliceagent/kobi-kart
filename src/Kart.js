@@ -30,6 +30,21 @@ export const TUNE = {
   iceGrip: 0.055, // low traction on off-road ice → drift / fishtail (1 = full grip elsewhere)
   slipTurnMul: 1.5, // twitchier steering on ice, so the tail swings out
 
+  // Drift mini-turbo (hold brake + steer at speed → slide & charge → release for a boost).
+  driftMinSpeed: 150, // min speed to *start* a drift (scaled by car-speed setting)
+  driftKeepSpeed: 90, // drop below this and the drift ends
+  driftGrip: 0.16, // low traction while drifting so the tail slides out
+  driftSpeedMul: 0.94, // small speed scrub during the slide
+  driftBias: 0.55, // how hard the kart auto-arcs into the locked drift direction
+  driftSteerAdjust: 0.5, // how much the player can tighten/widen the drift arc
+  driftStraightenTime: 0.22, // straighten for this long to pop out of the drift
+  // Charge tiers: reach `time` seconds → release grants `dur` seconds of boost.
+  driftTiers: [
+    { time: 0.40, dur: 0.50, color: 0x6cc4ff }, // blue  — mini
+    { time: 0.95, dur: 0.92, color: 0xffae3a }, // orange — super
+    { time: 1.70, dur: 1.45, color: 0xc06bff }, // purple — ultra
+  ],
+
   // Boost meter.
   boostMax: 100,
   boostDrain: 55,
@@ -56,6 +71,14 @@ export default class Kart {
     this.boostFuel = TUNE.boostMax;
     this.boostDepleted = false;
     this.boosting = false;
+
+    // Drift mini-turbo state.
+    this.drifting = false;
+    this.driftDir = 0; // +1 / -1, locked when the drift starts
+    this.driftCharge = 0; // seconds held
+    this.driftStraight = 0; // time spent not steering into the drift
+    this.driftSparkTier = 0; // 0..3, current charge tier (for the rear sparks)
+    this.miniTurbo = 0; // set to the tier on release; the scene reads + clears it
 
     // Power-up / race state.
     this.frozen = true; // released at GO
@@ -100,7 +123,24 @@ export default class Kart {
   hit(duration = 1.3) {
     if (this.shieldTimer > 0) { this.shieldTimer = 0; return false; }
     this.spinTimer = Math.max(this.spinTimer, duration);
+    this.endDrift();
     return true;
+  }
+
+  // End a drift; if it charged far enough, grant the mini-turbo and flag the
+  // scene (via miniTurbo) to spark + play the sound.
+  endDrift() {
+    if (!this.drifting) return;
+    const tier = this.driftSparkTier;
+    this.drifting = false;
+    this.driftDir = 0;
+    this.driftCharge = 0;
+    this.driftStraight = 0;
+    this.driftSparkTier = 0;
+    if (tier > 0) {
+      this.padBoostTimer = Math.max(this.padBoostTimer, TUNE.driftTiers[tier - 1].dur);
+      this.miniTurbo = tier;
+    }
   }
 
   // terrain describes the surface under the kart this frame:
@@ -123,6 +163,7 @@ export default class Kart {
       this.speed = 0;
       this.vx = 0;
       this.vy = 0;
+      this.drifting = false;
       this.knockX *= decay;
       this.knockY *= decay;
       return;
@@ -144,8 +185,29 @@ export default class Kart {
       return;
     }
 
-    // Boost meter (fires anywhere with fuel; weaker on grass).
-    this.boosting = wantBoost && !this.boostDepleted && this.boostFuel > 0;
+    // --- Drift state (human karts). Hold brake + steer hard at speed to slide
+    // and charge a mini-turbo; pop out by straightening or releasing the brake. ---
+    if (this.isAI) {
+      this.drifting = false;
+    } else if (!this.drifting) {
+      if (braking && this.speed > TUNE.driftMinSpeed * this.speedScale && Math.abs(steer) > 0.35) {
+        this.drifting = true;
+        this.driftDir = steer < 0 ? -1 : 1;
+        this.driftCharge = 0;
+        this.driftStraight = 0;
+        this.driftSparkTier = 0;
+      }
+    } else {
+      const intoDrift = this.driftDir > 0 ? steer > 0.1 : steer < -0.1;
+      this.driftStraight = intoDrift ? 0 : this.driftStraight + dt;
+      if (!braking || this.speed < TUNE.driftKeepSpeed * this.speedScale
+          || this.driftStraight > TUNE.driftStraightenTime) {
+        this.endDrift();
+      }
+    }
+
+    // Boost meter (fires anywhere with fuel; suppressed mid-drift).
+    this.boosting = wantBoost && !this.drifting && !this.boostDepleted && this.boostFuel > 0;
     if (this.boosting) {
       this.boostFuel = Math.max(0, this.boostFuel - TUNE.boostDrain * dt);
       if (this.boostFuel === 0) this.boostDepleted = true;
@@ -179,29 +241,50 @@ export default class Kart {
     }
     cap *= this.speedMul * this.speedScale * (terrain.capMul || 1);
 
-    if (braking) {
+    if (this.drifting) {
+      // Keep momentum through the corner (no brake decel) with a small scrub,
+      // and grow the charge tier the longer you hold the slide.
+      this.driftCharge += dt;
+      let tier = 0;
+      for (let i = TUNE.driftTiers.length - 1; i >= 0; i -= 1) {
+        if (this.driftCharge >= TUNE.driftTiers[i].time) { tier = i + 1; break; }
+      }
+      this.driftSparkTier = tier;
+      this.speed += TUNE.accel * dt;
+      const driftCap = cap * TUNE.driftSpeedMul;
+      if (this.speed > driftCap) this.speed = Math.max(driftCap, this.speed - TUNE.overspeedDecel * dt);
+    } else if (braking) {
       // Brake to a stop, then back up slowly while still held.
       this.speed = Math.max(-TUNE.reverseSpeed * this.speedScale, this.speed - TUNE.brakeDecel * dt);
     } else {
       this.speed += TUNE.accel * dt;
     }
-    if (this.speed > cap) this.speed = Math.max(cap, this.speed - TUNE.overspeedDecel * dt);
+    if (!this.drifting && this.speed > cap) this.speed = Math.max(cap, this.speed - TUNE.overspeedDecel * dt);
 
-    // Grip: low off-road ice is the slickest; otherwise a wet road's grip
-    // (terrain.grip < 1) applies everywhere on that world. 1 = full traction.
+    // Grip: drifting slides the tail out; off-road ice is the slickest; otherwise
+    // a wet world's grip (terrain.grip < 1) applies. 1 = full traction.
     let grip;
-    if (!onRoad && offType === 'ice') grip = TUNE.iceGrip;
+    if (this.drifting) grip = TUNE.driftGrip;
+    else if (!onRoad && offType === 'ice') grip = TUNE.iceGrip;
     else grip = terrain.grip != null ? terrain.grip : 1;
-    const lowGrip = grip < 0.2; // ice-level: twitchy steering so the tail swings
+    const lowGrip = !this.drifting && grip < 0.2; // ice-level: twitchy steering
 
     // Steering works forwards and in reverse (use speed magnitude).
     const turnFactor = Math.max(
       TUNE.minTurnFactor,
       Phaser.Math.Clamp(Math.abs(this.speed) / TUNE.minTurnSpeed, 0, 1)
     );
-    let turnRate = braking ? TUNE.driftTurnRate : TUNE.turnRate;
-    if (lowGrip) turnRate *= TUNE.slipTurnMul; // twitchy on ice
-    this.heading += steer * turnRate * turnFactor * dt;
+    let effSteer = steer;
+    let turnRate;
+    if (this.drifting) {
+      // Auto-arc into the locked drift direction; the player tightens/widens it.
+      effSteer = Phaser.Math.Clamp(this.driftDir * TUNE.driftBias + steer * TUNE.driftSteerAdjust, -1, 1);
+      turnRate = TUNE.driftTurnRate;
+    } else {
+      turnRate = braking ? TUNE.driftTurnRate : TUNE.turnRate;
+      if (lowGrip) turnRate *= TUNE.slipTurnMul; // twitchy on ice
+    }
+    this.heading += effSteer * turnRate * turnFactor * dt;
 
     // The engine pushes along the heading; grip pulls actual velocity toward
     // that. Full grip (1) snaps instantly (normal handling); low grip lets

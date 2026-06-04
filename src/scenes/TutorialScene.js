@@ -130,7 +130,7 @@ export default class TutorialScene extends Phaser.Scene {
 
   // -------------------------------------------------------------- steps ----
   resetFlags() {
-    this.flags = { left: false, right: false, boost: false, reverse: false, offRoad: false, item: false };
+    this.flags = { left: false, right: false, boost: false, reverse: false, offRoad: false, drift: false, item: false };
   }
 
   buildSteps() {
@@ -155,6 +155,11 @@ export default class TutorialScene extends Phaser.Scene {
         title: 'STAY ON THE TRACK', type: 'do',
         body: 'The road is fast — the grass is SLOW.\nSteer off onto the grass to feel it drag,\nthen get back on the road.',
         check: () => this.flags.offRoad,
+      },
+      {
+        title: 'DRIFT BOOST', type: 'do',
+        body: 'At speed, hold BRAKE (↓ / S) WHILE you TURN to\nDRIFT — you slide through the corner.\nHold the slide to charge the sparks (blue →\norange → purple), then let go for a MINI-BOOST!',
+        check: () => this.flags.drift,
       },
       {
         title: 'GRAB AN ITEM', type: 'do',
@@ -341,6 +346,7 @@ export default class TutorialScene extends Phaser.Scene {
     if (inp.boosting && this.kart.boostFuel < TUNE.boostMax - 8) this.flags.boost = true;
     if (this.kart.speed < -20) this.flags.reverse = true;
     if (!onRoad) this.flags.offRoad = true;
+    if (this.kart.driftSparkTier > 0 || this.kart.miniTurbo > 0) { this.flags.drift = true; this.kart.miniTurbo = 0; }
 
     // Item box pickup.
     if (this.itemBox) {

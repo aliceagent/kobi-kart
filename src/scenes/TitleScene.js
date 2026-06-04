@@ -41,9 +41,15 @@ export default class TitleScene extends Phaser.Scene {
     this.tweens.add({ targets: this.titleText, scale: { from: 1, to: 1.05 }, duration: 950, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
 
     this.add.text(W / 2, H * 0.285,
-      this.psychedelic ? '★ RAINBOW ROAD UNLOCKED ★  ·  5 races' : '4-track cup  ·  power-ups  ·  same keyboard', {
+      this.psychedelic ? '★ RAINBOW ROAD UNLOCKED ★  ·  5 races' : '3 cups  ·  power-ups  ·  same keyboard', {
         fontFamily: 'monospace', fontSize: '16px',
         color: this.psychedelic ? '#ffffff' : '#11364f', fontStyle: 'bold',
+      }).setOrigin(0.5).setDepth(20);
+
+    this.add.text(W / 2, H * 0.355,
+      '💨 hold BRAKE while turning to DRIFT — release for a mini-boost!', {
+        fontFamily: 'monospace', fontSize: '13px', color: '#ffffff', fontStyle: 'bold',
+        stroke: '#11364f', strokeThickness: 4,
       }).setOrigin(0.5).setDepth(20);
 
     this.makeButton(W / 2, H * 0.43, '1 PLAYER', 0xff4d4d, () => this.startGame(1), { h: 52 });

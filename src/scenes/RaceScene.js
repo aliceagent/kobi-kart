@@ -738,6 +738,7 @@ export default class RaceScene extends Phaser.Scene {
     if (this.fatalOffRoad) this.racers.forEach((r) => this.updateFall(r, dt));
     this.updateWind(dt);
     this.racers.forEach((r) => this.driveRacer(r, dt, false));
+    this.racers.forEach((r) => this.releaseMiniTurbo(r));
     this.racers.forEach((r) => this.applyRoadFeatures(r));
     this.updateHazards(dt);
     this.updateMovers(dt);
@@ -1064,6 +1065,16 @@ export default class RaceScene extends Phaser.Scene {
     this.order.forEach((k, i) => { k.livePlace = i + 1; });
   }
 
+  // A charged drift just popped → spark burst + a quick "boost" zip (humans only,
+  // since only they drift). miniTurbo holds the tier (1 blue / 2 orange / 3 purple).
+  releaseMiniTurbo(kart) {
+    if (!kart.miniTurbo) return;
+    const tier = TUNE.driftTiers[kart.miniTurbo - 1];
+    kart.miniTurbo = 0;
+    this.burst(kart.x, kart.y, tier ? tier.color : 0xffffff);
+    if (!kart.isAI) Audio.sfx('boost');
+  }
+
   drawDynamic() {
     const g = this.dynGfx;
     g.clear();
@@ -1071,6 +1082,21 @@ export default class RaceScene extends Phaser.Scene {
       if (r.shieldTimer > 0) {
         g.lineStyle(3, 0x9fe8ff, 0.5 + 0.3 * Math.sin(this.elapsed * 14));
         g.strokeCircle(r.x, r.y, r.radius + 7);
+      }
+      // Drift sparks at the rear wheels, colour-coded by charge tier.
+      if (r.drifting && r.driftSparkTier > 0) {
+        const col = TUNE.driftTiers[r.driftSparkTier - 1].color;
+        const bx = r.x - Math.cos(r.heading) * 14;
+        const by = r.y - Math.sin(r.heading) * 14;
+        const nx = -Math.sin(r.heading);
+        const ny = Math.cos(r.heading);
+        for (const side of [-1, 1]) {
+          const fl = 1.6 + Math.sin(this.elapsed * 40 + side) * 1.2;
+          g.fillStyle(0xffffff, 0.9);
+          g.fillCircle(bx + nx * side * 8, by + ny * side * 8, fl * 0.6);
+          g.fillStyle(col, 0.9);
+          g.fillCircle(bx + nx * side * 8, by + ny * side * 8, fl);
+        }
       }
     }
   }
