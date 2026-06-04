@@ -25,7 +25,7 @@ export default class TutorialScene extends Phaser.Scene {
     // Player kart — a touch slower than race pace so it's easy to learn on.
     const sx = OVAL.cx;
     const sy = OVAL.cy + (OVAL.outerRy + OVAL.innerRy) / 2;
-    this.kart = new Kart(this, sx, sy, Math.PI, 'kart_p1');
+    this.kart = new Kart(this, sx, sy, Math.PI, 'kart_red');
     this.kart.frozen = false;
     this.kart.speedScale = 0.62;
 
