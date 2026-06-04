@@ -113,7 +113,7 @@ export default class UIScene extends Phaser.Scene {
     this.gfx.strokeRoundedRect(bx, y, w, h, 3);
   }
 
-  drawItemBox(x, y, size, item, accent) {
+  drawItemBox(x, y, size, item, accent, count) {
     const g = this.gfx;
     g.fillStyle(0x000000, 0.45);
     g.fillRoundedRect(x, y, size, size, 7);
@@ -127,11 +127,17 @@ export default class UIScene extends Phaser.Scene {
       g.fillCircle(cx, cy, 3);
       return;
     }
-    if (item === 'boost') {
-      g.fillStyle(0xffd23f, 1);
-      g.fillTriangle(cx - 10, cy - 8, cx - 10, cy + 8, cx - 1, cy);
-      g.fillTriangle(cx - 1, cy - 8, cx - 1, cy + 8, cx + 8, cy);
-    } else if (item === 'greenShell' || item === 'redShell' || item === 'blueShell') {
+    if (item === 'boost' || item === 'tripleMushroom') {
+      if (item === 'tripleMushroom') {
+        g.fillStyle(0xefe6cf, 1); g.fillRect(cx - 3, cy, 6, 9);
+        g.fillStyle(0xff5a4d, 1); g.fillEllipse(cx, cy, 22, 16);
+        g.fillStyle(0xffffff, 0.85); g.fillCircle(cx - 5, cy - 2, 2.4); g.fillCircle(cx + 4, cy - 1, 2);
+      } else {
+        g.fillStyle(0xffd23f, 1);
+        g.fillTriangle(cx - 10, cy - 8, cx - 10, cy + 8, cx - 1, cy);
+        g.fillTriangle(cx - 1, cy - 8, cx - 1, cy + 8, cx + 8, cy);
+      }
+    } else if (item === 'greenShell' || item === 'redShell' || item === 'blueShell' || item === 'tripleShell') {
       let base = 0x3ecf5a; let rim = 0x1f8f3f; let dark = 0x14662b;
       if (item === 'redShell') { base = 0xff5a5a; rim = 0xc0392b; dark = 0x8e1f1f; }
       else if (item === 'blueShell') { base = 0x4d8bff; rim = 0x1e46b0; dark = 0x122e6e; }
@@ -152,6 +158,29 @@ export default class UIScene extends Phaser.Scene {
     } else if (item === 'shield') {
       g.fillStyle(0x9fe8ff, 0.28); g.fillCircle(cx, cy, 11);
       g.lineStyle(3, 0x9fe8ff, 1); g.strokeCircle(cx, cy, 11);
+    } else if (item === 'star') {
+      const pts = [];
+      for (let k = 0; k < 10; k += 1) {
+        const rr = k % 2 === 0 ? 12 : 5;
+        const a = -Math.PI / 2 + (k * Math.PI) / 5;
+        pts.push({ x: cx + Math.cos(a) * rr, y: cy + Math.sin(a) * rr });
+      }
+      g.fillStyle(0xffe14d, 1); g.fillPoints(pts, true);
+      g.fillStyle(0xfff7c0, 0.8); g.fillCircle(cx, cy, 3);
+    } else if (item === 'lightning') {
+      g.fillStyle(0xffe14d, 1);
+      g.fillPoints([
+        { x: cx + 3, y: cy - 11 }, { x: cx - 7, y: cy + 2 }, { x: cx - 1, y: cy + 2 },
+        { x: cx - 3, y: cy + 11 }, { x: cx + 7, y: cy - 2 }, { x: cx + 1, y: cy - 2 },
+      ], true);
+    }
+
+    // Ammo pips for the multi-use items (triple mushroom / triple shell).
+    if (count > 1) {
+      for (let i = 0; i < count; i += 1) {
+        g.fillStyle(0x000000, 0.6); g.fillCircle(x + size - 7 - i * 7, y + size - 6, 3);
+        g.fillStyle(0xffffff, 1); g.fillCircle(x + size - 7 - i * 7, y + size - 6, 2);
+      }
     }
   }
 
@@ -184,13 +213,13 @@ export default class UIScene extends Phaser.Scene {
     if (h0) {
       this.p1Text.setText(`P1  ${ordinal(h0.livePlace || 1)}${h0.finished ? '  done' : ''}`);
       this.drawBar(16, 34, h0, h0.color, false);
-      this.drawItemBox(16, 54, 42, h0.heldItem, h0.color);
+      this.drawItemBox(16, 54, 42, h0.heldItem, h0.color, h0.heldCount || h0.orbitShells || 0);
     }
     const h1 = race.humans[1];
     if (h1) {
       this.p2Text.setText(`${ordinal(h1.livePlace || 1)}  P2${h1.finished ? '  done' : ''}`);
       this.drawBar(W - 16, 34, h1, h1.color, true);
-      this.drawItemBox(W - 16 - 42, 54, 42, h1.heldItem, h1.color);
+      this.drawItemBox(W - 16 - 42, 54, 42, h1.heldItem, h1.color, h1.heldCount || h1.orbitShells || 0);
     }
 
     // Boost speed-lines: intensity from the fastest human's boost state.

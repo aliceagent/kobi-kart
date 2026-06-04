@@ -88,7 +88,10 @@ export default class Kart {
     this.padBoostTimer = 0; // brief boost from a speed strip / boost pad
     this.oilImmune = 0; // grace after an oil-slick spin so it can't trap you
     this.bounceCd = 0; // cooldown so a bounce pad fires once per touch
+    this.starTimer = 0; // invincibility star: immune + faster + plows others
     this.heldItem = null;
+    this.heldCount = 0; // ammo for triple-mushroom
+    this.orbitShells = 0; // orbiting green shells (triple-shell)
     this.stuckTimer = 0; // time spent wedged off-track (for auto-rescue)
     this.falling = false; // falling off Rainbow Road into space
     this.fallTimer = 0;
@@ -119,8 +122,9 @@ export default class Kart {
 
   get spunOut() { return this.spinTimer > 0; }
 
-  // Returns true if the hit landed, false if a shield blocked it.
+  // Returns true if the hit landed, false if blocked (star = invincible, or a shield).
   hit(duration = 1.3) {
+    if (this.starTimer > 0) return false;
     if (this.shieldTimer > 0) { this.shieldTimer = 0; return false; }
     this.spinTimer = Math.max(this.spinTimer, duration);
     this.endDrift();
@@ -153,6 +157,7 @@ export default class Kart {
 
     if (this.itemBoostTimer > 0) this.itemBoostTimer -= dt;
     if (this.padBoostTimer > 0) this.padBoostTimer -= dt;
+    if (this.starTimer > 0) this.starTimer -= dt;
     if (this.bounceCd > 0) this.bounceCd -= dt;
     if (this.oilImmune > 0) this.oilImmune -= dt;
     if (this.shieldTimer > 0) this.shieldTimer -= dt;
@@ -234,7 +239,7 @@ export default class Kart {
       cap = onRoad ? TUNE.itemBoostSpeed : offItem;
     } else if (this.padBoostTimer > 0) {
       cap = onRoad ? TUNE.padBoostSpeed : offBoost;
-    } else if (this.boosting) {
+    } else if (this.boosting || this.starTimer > 0) {
       cap = onRoad ? TUNE.boostSpeed : offBoost;
     } else {
       cap = onRoad ? TUNE.maxSpeed : offMax;

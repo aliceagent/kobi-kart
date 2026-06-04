@@ -172,11 +172,15 @@ export default class TutorialScene extends Phaser.Scene {
         body: '',
         items: [
           ['boost', 'Boost', 'a burst of speed'],
+          ['tripleMushroom', 'Triple boost', 'three quick speed bursts'],
           ['greenShell', 'Green shell', 'fires straight, bounces off walls'],
+          ['tripleShell', 'Triple shells', 'three orbit you — fire or block'],
           ['redShell', 'Red shell', 'homes onto the racer ahead'],
-          ['blueShell', 'Blue shell', 'rare — last place only, hunts 1st'],
+          ['blueShell', 'Blue shell', 'rare — last place, hunts 1st'],
           ['trap', 'Oil slick', 'drop it behind to spin out chasers'],
           ['shield', 'Shield', 'blocks the next hit'],
+          ['star', 'Star', 'brief invincibility — plow through!'],
+          ['lightning', 'Lightning', 'rare — zaps every other racer'],
         ],
       },
       {
@@ -255,15 +259,16 @@ export default class TutorialScene extends Phaser.Scene {
   }
 
   showItemList(step) {
-    const W = this.scale.width;
-    const startY = 96;
-    const rowH = 42;
-    const x = 110;
+    const many = step.items.length > 7;
+    const startY = many ? 80 : 96;
+    const rowH = many ? 36 : 42;
+    const x = 84;
+    const fontSize = many ? 14 : 16;
     step.items.forEach((it, i) => {
       const cy = startY + i * rowH;
       this.drawItemIcon(this.iconGfx, x, cy, it[0]);
-      const label = this.add.text(x + 34, cy, `${it[1]} — ${it[2]}`, {
-        fontFamily: 'monospace', fontSize: '16px', color: '#ffffff', stroke: '#000000', strokeThickness: 3,
+      const label = this.add.text(x + 30, cy, `${it[1]} — ${it[2]}`, {
+        fontFamily: 'monospace', fontSize: `${fontSize}px`, color: '#ffffff', stroke: '#000000', strokeThickness: 3,
       }).setOrigin(0, 0.5).setDepth(21);
       this.iconLabels.push(label);
     });
@@ -280,8 +285,23 @@ export default class TutorialScene extends Phaser.Scene {
     } else if (kind === 'shield') {
       g.fillStyle(0x9fe8ff, 0.3); g.fillCircle(cx, cy, 12);
       g.lineStyle(3, 0x9fe8ff, 1); g.strokeCircle(cx, cy, 12);
+    } else if (kind === 'tripleMushroom') {
+      g.fillStyle(0xefe6cf, 1); g.fillRect(cx - 3, cy, 6, 10);
+      g.fillStyle(0xff5a4d, 1); g.fillEllipse(cx, cy, 24, 17);
+      g.fillStyle(0xffffff, 0.85); g.fillCircle(cx - 5, cy - 2, 2.6); g.fillCircle(cx + 4, cy - 1, 2.2);
+    } else if (kind === 'star') {
+      const pts = [];
+      for (let k = 0; k < 10; k += 1) { const rr = k % 2 === 0 ? 13 : 5.5; const a = -Math.PI / 2 + (k * Math.PI) / 5; pts.push({ x: cx + Math.cos(a) * rr, y: cy + Math.sin(a) * rr }); }
+      g.fillStyle(0xffe14d, 1); g.fillPoints(pts, true);
+      g.fillStyle(0xfff7c0, 0.85); g.fillCircle(cx, cy, 3.5);
+    } else if (kind === 'lightning') {
+      g.fillStyle(0xffe14d, 1);
+      g.fillPoints([
+        { x: cx + 3, y: cy - 12 }, { x: cx - 8, y: cy + 2 }, { x: cx - 1, y: cy + 2 },
+        { x: cx - 3, y: cy + 12 }, { x: cx + 8, y: cy - 2 }, { x: cx + 1, y: cy - 2 },
+      ], true);
     } else {
-      // shells
+      // shells (green / red / blue / triple)
       let base = 0x3ecf5a; let rim = 0x1f8f3f; let dark = 0x14662b;
       if (kind === 'redShell') { base = 0xff5a5a; rim = 0xc0392b; dark = 0x8e1f1f; }
       else if (kind === 'blueShell') { base = 0x4d8bff; rim = 0x1e46b0; dark = 0x122e6e; }

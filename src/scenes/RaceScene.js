@@ -19,10 +19,10 @@ const RACE_HARD_CAP = 240; // absolute safety cap (since GO)
 // Position-based item odds (Mario-Kart style): leaders get defensive/area-denial
 // items, trailers get catch-up items. Keyed by live race position (1 = first).
 const ITEM_WEIGHTS = {
-  1: { trap: 4, shield: 3, greenShell: 2 },
-  2: { greenShell: 3, trap: 2, shield: 1, boost: 2, redShell: 1 },
-  3: { boost: 3, greenShell: 2, redShell: 2, trap: 1, shield: 1 },
-  4: { boost: 4, redShell: 3, shield: 1, greenShell: 1 },
+  1: { trap: 4, shield: 3, greenShell: 2, tripleShell: 2 },
+  2: { greenShell: 3, trap: 2, shield: 2, boost: 2, redShell: 1, tripleShell: 2 },
+  3: { boost: 3, greenShell: 2, redShell: 2, tripleShell: 2, tripleMushroom: 2, star: 1, trap: 1 },
+  4: { boost: 2, redShell: 2, tripleMushroom: 3, star: 2, lightning: 1, shield: 1 },
 };
 
 function closestOnSeg(px, py, ax, ay, bx, by) {
@@ -372,27 +372,53 @@ export default class RaceScene extends Phaser.Scene {
   giveItem(kart) {
     const place = Phaser.Math.Clamp(kart.livePlace || 1, 1, 4);
     // Last place has a 1-in-10 shot at the dreaded blue (leader-seeking) shell.
-    if (place === 4 && Math.random() < 0.1) { kart.heldItem = 'blueShell'; return; }
+    if (place === 4 && Math.random() < 0.1) { this.grantItem(kart, 'blueShell'); return; }
     const weights = ITEM_WEIGHTS[place];
     let total = 0;
     for (const k in weights) total += weights[k];
     let r = Math.random() * total;
     let chosen = 'boost';
     for (const k in weights) { r -= weights[k]; if (r <= 0) { chosen = k; break; } }
-    kart.heldItem = chosen;
+    this.grantItem(kart, chosen);
+  }
+
+  // Hand a kart an item, seeding the ammo count for the multi-use ones.
+  grantItem(kart, item) {
+    kart.heldItem = item;
+    kart.heldCount = item === 'tripleMushroom' ? 3 : 0;
+    kart.orbitShells = item === 'tripleShell' ? 3 : 0;
   }
 
   useItem(kart) {
     const item = kart.heldItem;
     if (!item) return;
-    kart.heldItem = null;
     Audio.sfx('item');
     if (item === 'boost') { kart.itemBoostTimer = 1.6; Audio.sfx('boost'); this.burst(kart.x, kart.y, 0xffd23f); }
+    else if (item === 'tripleMushroom') { kart.itemBoostTimer = 1.35; Audio.sfx('boost'); this.burst(kart.x, kart.y, 0xff5fa2); }
     else if (item === 'shield') { kart.shieldTimer = 6; }
+    else if (item === 'star') { kart.starTimer = 5.5; Audio.sfx('boost'); this.burst(kart.x, kart.y, 0xffe14d); }
     else if (item === 'greenShell') this.spawnProjectile(kart, 'green');
     else if (item === 'redShell') this.spawnProjectile(kart, 'red');
     else if (item === 'blueShell') this.spawnProjectile(kart, 'blue');
+    else if (item === 'tripleShell') this.spawnProjectile(kart, 'green'); // launches one orbiting shell
     else if (item === 'trap') this.spawnTrap(kart);
+    else if (item === 'lightning') this.lightningStrike(kart);
+
+    // Multi-use items keep their slot until the ammo runs out.
+    if (item === 'tripleMushroom') { kart.heldCount -= 1; if (kart.heldCount <= 0) kart.heldItem = null; }
+    else if (item === 'tripleShell') { kart.orbitShells -= 1; if (kart.orbitShells <= 0) kart.heldItem = null; }
+    else kart.heldItem = null;
+  }
+
+  // Lightning: zap every other racer (spin-out) with a screen flash. Rare,
+  // last-place-only — a dramatic comeback.
+  lightningStrike(kart) {
+    Audio.sfx('zap');
+    this.cameras.main.flash(220, 230, 230, 140);
+    for (const r of this.racers) {
+      if (r === kart || r.finished || r.falling) continue;
+      if (r.hit()) this.burst(r.x, r.y, 0xfff3b0);
+    }
   }
 
   // The racer one place ahead of this kart (a red shell's prey).
@@ -507,6 +533,18 @@ export default class RaceScene extends Phaser.Scene {
       if (p.homing) p.sprite.rotation = Math.atan2(p.vy, p.vx);
       else p.sprite.rotation += dt * 12;
       let dead = p.life <= 0 || p.x < 0 || p.x > WORLD_W || p.y < 0 || p.y > WORLD_H;
+      // Orbiting triple-shells intercept an incoming projectile (one shell each).
+      if (!dead) {
+        for (const r of this.racers) {
+          if (r === p.owner || r.finished || r.orbitShells <= 0) continue;
+          if ((r.x - p.x) ** 2 + (r.y - p.y) ** 2 < (r.radius + 20) ** 2) {
+            r.orbitShells -= 1;
+            if (r.orbitShells <= 0 && r.heldItem === 'tripleShell') r.heldItem = null;
+            this.burst(p.x, p.y, 0x9bf0a6); Audio.sfx('bump');
+            dead = true; break;
+          }
+        }
+      }
       if (!dead) {
         for (const r of this.racers) {
           if (r === p.owner || r.finished) continue;
@@ -619,6 +657,22 @@ export default class RaceScene extends Phaser.Scene {
     const nx = dx / dist;
     const ny = dy / dist;
     const overlap = minDist - dist;
+
+    // A star racer plows through: the other kart spins out and is flung away,
+    // the star kart keeps its momentum.
+    const aStar = a.starTimer > 0;
+    const bStar = b.starTimer > 0;
+    if (aStar !== bStar) {
+      const victim = aStar ? b : a;
+      const sign = aStar ? 1 : -1;
+      victim.x += nx * overlap * sign; victim.y += ny * overlap * sign;
+      if (victim.hit()) {
+        victim.knockX += nx * sign * 360; victim.knockY += ny * sign * 360;
+        this.burst(victim.x, victim.y, 0xffe14d); Audio.sfx('hit');
+      }
+      return;
+    }
+
     a.x -= (nx * overlap) / 2; a.y -= (ny * overlap) / 2;
     b.x += (nx * overlap) / 2; b.y += (ny * overlap) / 2;
     const push = 150 + (a.speed + b.speed) * 0.25;
@@ -1161,6 +1215,28 @@ export default class RaceScene extends Phaser.Scene {
           g.fillCircle(bx + nx * side * 8, by + ny * side * 8, fl * 0.6);
           g.fillStyle(col, 0.9);
           g.fillCircle(bx + nx * side * 8, by + ny * side * 8, fl);
+        }
+      }
+
+      // Invincibility star: flashing rainbow tint + a sparkly ring.
+      if (r.starTimer > 0) {
+        const hue = (this.elapsed * 1.4) % 1;
+        r.sprite.setTint(Phaser.Display.Color.HSVToRGB(hue, 0.8, 1).color);
+        g.lineStyle(2, Phaser.Display.Color.HSVToRGB((hue + 0.5) % 1, 0.7, 1).color, 0.8);
+        g.strokeCircle(r.x, r.y, r.radius + 5 + Math.sin(this.elapsed * 20) * 2);
+      } else if (r.sprite.isTinted) {
+        r.sprite.clearTint();
+      }
+
+      // Orbiting triple-shells circling the kart (defensive + ammo).
+      if (r.orbitShells > 0) {
+        for (let i = 0; i < r.orbitShells; i += 1) {
+          const a = this.elapsed * 3.2 + (i * Math.PI * 2) / 3;
+          const ox = r.x + Math.cos(a) * (r.radius + 13);
+          const oy = r.y + Math.sin(a) * (r.radius + 13);
+          g.fillStyle(0x14662b, 1); g.fillCircle(ox, oy, 6);
+          g.fillStyle(0x3ecf5a, 1); g.fillCircle(ox, oy, 4.5);
+          g.fillStyle(0xffffff, 0.6); g.fillCircle(ox - 1.5, oy - 1.5, 1.4);
         }
       }
     }

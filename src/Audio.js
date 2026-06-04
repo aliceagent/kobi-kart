@@ -132,6 +132,7 @@ export function sfx(name) {
     case 'bump': blip(120, 0, 0.06, 'square', 0.08); break;
     case 'lap': blip(784, 0, 0.1, 'square', 0.14); blip(1047, 0.1, 0.18, 'square', 0.14); break;
     case 'finallap': [659, 880, 1047, 1319].forEach((f, i) => blip(f, i * 0.1, 0.3, 'square', 0.2)); break;
+    case 'zap': [1320, 990, 660, 440, 1100].forEach((f, i) => blip(f, i * 0.04, 0.16, 'sawtooth', 0.18)); break;
     case 'finish': [523, 659, 784, 1047].forEach((f, i) => blip(f, i * 0.12, 0.25, 'square', 0.18)); break;
     case 'fanfare': [523, 523, 784, 1047, 1318].forEach((f, i) => blip(f, i * 0.16, 0.4, 'square', 0.2)); break;
     default: break;
