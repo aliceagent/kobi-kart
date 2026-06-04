@@ -1,19 +1,54 @@
 // Shared generated textures. Created once (guarded) and reused across scenes;
 // Phaser's TextureManager is global, so a BootScene can prime them all.
 
+// Top-down go-kart, nose pointing +x (heading 0). Tyres poke out the sides, a
+// tapered chassis carries side pods and a cockpit with the driver's helmet
+// (tinted with the car's trim so each racer reads at a glance), plus a glossy
+// sheen.
 export function makeKartTexture(scene, key, bodyColor, trimColor) {
   if (scene.textures.exists(key)) return;
-  const w = 42;
-  const h = 28;
+  const w = 46;
+  const h = 32;
+  const cy = h / 2;
   const g = scene.make.graphics({ x: 0, y: 0, add: false });
-  g.fillStyle(0x1c1c22, 1);
-  g.fillRoundedRect(0, 0, w, h, 7);
-  g.fillStyle(bodyColor, 1);
-  g.fillRoundedRect(3, 3, w - 6, h - 6, 6);
+
+  // Tyres (dark, with a lighter hub band). Rear pair a touch larger.
+  const tyre = (tx, ty, tw, th) => {
+    g.fillStyle(0x111116, 1); g.fillRoundedRect(tx, ty, tw, th, 3);
+    g.fillStyle(0x33333c, 1); g.fillRoundedRect(tx + 1.5, ty + th * 0.32, tw - 3, th * 0.36, 2);
+  };
+  tyre(5, 0, 13, 9); tyre(5, h - 9, 13, 9);       // rear
+  tyre(31, 1, 10, 8); tyre(31, h - 9, 10, 8);     // front
+
+  // Rear wing / bumper.
+  g.fillStyle(0x15151b, 1); g.fillRoundedRect(1, cy - 12, 6, 24, 3);
+
+  // Chassis: dark hull, then the body colour inset a couple px for an outline.
+  const hull = [
+    { x: w - 2, y: cy }, { x: w - 13, y: cy - 8 }, { x: 13, y: cy - 11 },
+    { x: 5, y: cy - 8 }, { x: 5, y: cy + 8 }, { x: 13, y: cy + 11 }, { x: w - 13, y: cy + 8 },
+  ];
+  const cxC = 22;
+  const inset = hull.map((p) => ({ x: (p.x - cxC) * 0.86 + cxC, y: (p.y - cy) * 0.80 + cy }));
+  g.fillStyle(0x14141a, 1); g.fillPoints(hull, true);
+  g.fillStyle(bodyColor, 1); g.fillPoints(inset, true);
+
+  // Front nose accent + lengthwise side stripes in the trim colour.
   g.fillStyle(trimColor, 1);
-  g.fillRect(6, h / 2 - 2, w - 12, 4);
-  g.fillStyle(0xbfe9ff, 1);
-  g.fillRoundedRect(w - 16, 6, 10, h - 12, 3);
+  g.fillTriangle(w - 4, cy, w - 13, cy - 5, w - 13, cy + 5);
+  g.fillRect(13, cy - 9, 16, 2.5);
+  g.fillRect(13, cy + 6.5, 16, 2.5);
+
+  // Cockpit well + driver helmet (trim-tinted) with a dark visor + highlight.
+  g.fillStyle(0x14141a, 1); g.fillEllipse(19, cy, 17, 16);
+  g.fillStyle(0x0d0d11, 1); g.fillCircle(19, cy, 6.6);
+  g.fillStyle(trimColor, 1); g.fillCircle(19, cy, 5.2);
+  g.fillStyle(0x0d0d11, 1); g.fillRect(20.5, cy - 3.6, 4, 7.2);
+  g.fillStyle(0xffffff, 0.55); g.fillCircle(16.8, cy - 2, 1.7);
+
+  // Glossy sheen across the nose.
+  g.fillStyle(0xffffff, 0.16); g.fillEllipse(31, cy - 5, 17, 7);
+
   g.generateTexture(key, w, h);
   g.destroy();
 }
