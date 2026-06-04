@@ -6,15 +6,20 @@ import { addMuteButton } from '../ui.js';
 
 const WORLD_LABEL = {
   Grassy: '🌳 Grassy', Beach: '🏖 Beach', Ice: '❄ Ice', Candy: '🍭 Candy',
+  Desert: '🏜 Desert', Coral: '🐠 Coral', Haunted: '👻 Haunted', Carnival: '🎪 Carnival',
   Volcano: '🌋 Volcano', Storm: '⛈️ Storm', Jungle: '🌿 Jungle', Neon: '🌃 Neon',
 };
 const WORLD_TAG = {
+  Desert: 'dust', Coral: 'flow', Haunted: 'fog', Carnival: 'bounce',
   Volcano: 'lava', Storm: 'wind', Jungle: 'mud', Neon: 'speed',
 };
-const CUP_COLOR = [0x3f9a47, 0xc8542a]; // Starter (green) / Pro (red-orange)
-const CUP_GLOW = [0x9bf06a, 0xffb24d]; // selection glow per cup
-const CUP_BADGE = ['🥇', '🏆']; // Starter medal / Pro trophy
-const CUP_PIPS = [1, 3]; // track-difficulty out of 3
+// Indexed to match the CUPS order: Starter / Adventure / Pro.
+const CUP_COLOR = [0x3f9a47, 0x2f8fb0, 0xc8542a];
+const CUP_GLOW = [0x9bf06a, 0x5fd8f0, 0xffb24d];
+const CUP_BADGE = ['🥉', '🥈', '🏆'];
+const CUP_PIPS = [1, 2, 3];
+const CUP_WORD = ['EASY', 'MEDIUM', 'EXPERT'];
+const CUP_WORD_COLOR = ['#bff5a0', '#a8e8ff', '#ffd0a0'];
 
 export default class CupSelectScene extends Phaser.Scene {
   constructor() {
@@ -32,30 +37,35 @@ export default class CupSelectScene extends Phaser.Scene {
 
     this.drawBackground(W, H);
 
-    const title = this.add.text(W / 2, H * 0.085, 'CHOOSE A CUP', {
-      fontFamily: 'monospace', fontSize: '46px', color: '#ffe14d', fontStyle: 'bold',
+    const title = this.add.text(W / 2, H * 0.08, 'CHOOSE A CUP', {
+      fontFamily: 'monospace', fontSize: '44px', color: '#ffe14d', fontStyle: 'bold',
       stroke: '#7a3bbf', strokeThickness: 7,
     }).setOrigin(0.5).setDepth(20);
     this.tweens.add({ targets: title, scale: { from: 1, to: 1.04 }, duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
 
-    this.add.text(W / 2, H * 0.155,
+    this.add.text(W / 2, H * 0.145,
       this.registry.get('rainbow') ? 'Win it for the cup — Rainbow Road waits at the end 🌈' : 'Win all four for the championship',
       { fontFamily: 'monospace', fontSize: '15px', color: '#cdbfff', fontStyle: 'bold' })
       .setOrigin(0.5).setDepth(20);
 
     this.cursor = 0;
     this.panels = [];
-    const panelW = 400;
-    const panelH = 446;
-    const gap = 56;
-    const cx = W / 2 - (panelW + gap) / 2;
-    const cy = H * 0.56;
+
+    // Responsive layout: fit however many cups there are across the screen.
+    const n = CUPS.length;
+    const gap = n >= 3 ? 22 : 50;
+    const sideMargin = 18;
+    const panelW = Math.min(400, (W - sideMargin * 2 - gap * (n - 1)) / n);
+    const panelH = 452;
+    const totalW = n * panelW + (n - 1) * gap;
+    const firstCx = (W - totalW) / 2 + panelW / 2;
+    const cy = H * 0.57;
 
     CUPS.forEach((cup, i) => {
-      this.panels.push(this.buildPanel(cup, i, cx + i * (panelW + gap), cy, panelW, panelH));
+      this.panels.push(this.buildPanel(cup, i, firstCx + i * (panelW + gap), cy, panelW, panelH));
     });
 
-    this.add.text(W / 2, H - 22,
+    this.add.text(W / 2, H - 20,
       '←/→ (or A/D) move    ·    SPACE / ENTER pick    ·    click a cup',
       { fontFamily: 'monospace', fontSize: '13px', color: '#ffffff', stroke: '#000000', strokeThickness: 3 })
       .setOrigin(0.5).setDepth(20).setAlpha(0.85);
@@ -74,78 +84,85 @@ export default class CupSelectScene extends Phaser.Scene {
   // ---------------------------------------------------------------- panel ----
   buildPanel(cup, index, x, cy, w, h) {
     const c = this.add.container(x, cy).setDepth(10);
-    const base = CUP_COLOR[index];
+    const base = CUP_COLOR[index] || 0x666666;
     const top = -h / 2;
+    const half = w / 2;
+    const sc = Phaser.Math.Clamp(w / 400, 0.7, 1); // content scale for narrow panels
+    const px = (n) => Math.round(n);
 
     // Drop shadow.
     const shadow = this.add.graphics();
-    shadow.fillStyle(0x000000, 0.4); shadow.fillRoundedRect(-w / 2 + 7, top + 9, w, h, 24);
+    shadow.fillStyle(0x000000, 0.4); shadow.fillRoundedRect(-half + 6, top + 8, w, h, 22);
     c.add(shadow);
 
     // Body with a glossy top sheen.
     const body = this.add.graphics();
-    body.fillStyle(base, 1); body.fillRoundedRect(-w / 2, top, w, h, 24);
-    body.fillStyle(0xffffff, 0.13); body.fillRoundedRect(-w / 2 + 7, top + 7, w - 14, h * 0.4, 18);
-    body.fillStyle(0x000000, 0.13); body.fillRoundedRect(-w / 2 + 7, top + h * 0.55, w - 14, h * 0.42, 18);
+    body.fillStyle(base, 1); body.fillRoundedRect(-half, top, w, h, 22);
+    body.fillStyle(0xffffff, 0.13); body.fillRoundedRect(-half + 6, top + 6, w - 12, h * 0.4, 16);
+    body.fillStyle(0x000000, 0.13); body.fillRoundedRect(-half + 6, top + h * 0.55, w - 12, h * 0.42, 16);
     c.add(body);
 
-    // Header band.
+    // Header band: tier badge + cup name + sub.
+    const hdH = 64;
     const hd = this.add.graphics();
-    hd.fillStyle(0x000000, 0.3); hd.fillRoundedRect(-w / 2 + 16, top + 18, w - 32, 70, 16);
+    hd.fillStyle(0x000000, 0.3); hd.fillRoundedRect(-half + 12, top + 14, w - 24, hdH, 14);
     c.add(hd);
-    const badge = this.add.text(-w / 2 + 56, top + 53, CUP_BADGE[index], {
-      fontFamily: 'monospace', fontSize: '40px',
+    const badge = this.add.text(-half + 22 + 16 * sc, top + 14 + hdH / 2, CUP_BADGE[index] || '🏁', {
+      fontFamily: 'monospace', fontSize: `${px(34 * sc)}px`,
     }).setOrigin(0.5);
     c.add(badge);
-    const name = this.add.text(28, top + 44, cup.name, {
-      fontFamily: 'monospace', fontSize: '30px', color: '#ffffff', fontStyle: 'bold',
+    const name = this.add.text(10, top + 14 + hdH * 0.38, cup.name, {
+      fontFamily: 'monospace', fontSize: `${px(28 * sc)}px`, color: '#ffffff', fontStyle: 'bold',
       stroke: '#000000', strokeThickness: 5,
     }).setOrigin(0.5);
     c.add(name);
-    const sub = this.add.text(28, top + 72, cup.sub, {
-      fontFamily: 'monospace', fontSize: '13px', color: '#ffffff', fontStyle: 'bold',
+    const sub = this.add.text(10, top + 14 + hdH * 0.76, cup.sub, {
+      fontFamily: 'monospace', fontSize: `${px(12 * sc)}px`, color: '#ffffff', fontStyle: 'bold',
     }).setOrigin(0.5).setAlpha(0.85);
     c.add(sub);
 
-    // Track-difficulty meter.
+    // Difficulty: three pips + the word (EASY / MEDIUM / EXPERT), centred.
+    const py = top + 108;
     const meter = this.add.graphics();
-    const filled = CUP_PIPS[index];
-    const py = top + 116;
-    const px = 64;
+    const filled = CUP_PIPS[index] || 1;
+    const pipStep = 18 * sc;
+    const pipR = 6 * sc;
+    const grpStart = -w * 0.2;
     for (let k = 0; k < 3; k += 1) {
       const on = k < filled;
       meter.fillStyle(on ? 0xffe14d : 0x000000, on ? 1 : 0.3);
-      meter.fillCircle(px + k * 22, py, 7);
-      meter.lineStyle(2, 0xffffff, 0.7); meter.strokeCircle(px + k * 22, py, 7);
+      meter.fillCircle(grpStart + k * pipStep, py, pipR);
+      meter.lineStyle(2, 0xffffff, 0.7); meter.strokeCircle(grpStart + k * pipStep, py, pipR);
     }
     c.add(meter);
-    const diffLabel = this.add.text(-w / 2 + 28, py, 'DIFFICULTY', {
-      fontFamily: 'monospace', fontSize: '12px', color: '#ffffff', fontStyle: 'bold',
-    }).setOrigin(0, 0.5).setAlpha(0.85);
-    c.add(diffLabel);
-    const diffWord = this.add.text(w / 2 - 28, py, index === 0 ? 'EASY' : 'EXPERT', {
-      fontFamily: 'monospace', fontSize: '13px', color: index === 0 ? '#bff5a0' : '#ffd0a0', fontStyle: 'bold',
-    }).setOrigin(1, 0.5);
-    c.add(diffWord);
+    const word = this.add.text(grpStart + 3 * pipStep + 8, py, CUP_WORD[index] || '', {
+      fontFamily: 'monospace', fontSize: `${px(14 * sc)}px`, color: CUP_WORD_COLOR[index] || '#ffffff', fontStyle: 'bold',
+    }).setOrigin(0, 0.5);
+    c.add(word);
 
     // Divider.
     const div = this.add.graphics();
-    div.lineStyle(2, 0xffffff, 0.25); div.beginPath();
-    div.moveTo(-w / 2 + 26, top + 142); div.lineTo(w / 2 - 26, top + 142); div.strokePath();
+    div.lineStyle(2, 0xffffff, 0.22); div.beginPath();
+    div.moveTo(-half + 22, top + 132); div.lineTo(half - 22, top + 132); div.strokePath();
     c.add(div);
 
-    // World rows: a mini track-tile swatch + icon + name (+ hazard tag).
+    // World rows: a mini track-tile swatch + icon + name (+ feature tag).
+    const swS = Math.max(12, 16 * sc);
+    const swX = -half + 16 + swS;
+    const labelX = swX + swS + 8;
+    const rowTop = top + 170;
+    const rowGap = 52;
     cup.themes.forEach((themeName, k) => {
-      const ry = top + 184 + k * 56;
-      this.drawSwatch(c, -w / 2 + 52, ry, themeName);
-      const label = this.add.text(-w / 2 + 84, ry, WORLD_LABEL[themeName] || themeName, {
-        fontFamily: 'monospace', fontSize: '21px', color: '#ffffff', fontStyle: 'bold',
+      const ry = rowTop + k * rowGap;
+      this.drawSwatch(c, swX, ry, themeName, swS);
+      const label = this.add.text(labelX, ry, WORLD_LABEL[themeName] || themeName, {
+        fontFamily: 'monospace', fontSize: `${px(Phaser.Math.Clamp(20 * sc, 14, 20))}px`, color: '#ffffff', fontStyle: 'bold',
         stroke: '#000000', strokeThickness: 3,
       }).setOrigin(0, 0.5);
       c.add(label);
       if (WORLD_TAG[themeName]) {
-        const tag = this.add.text(w / 2 - 28, ry, WORLD_TAG[themeName], {
-          fontFamily: 'monospace', fontSize: '13px', color: '#ffe7b0', fontStyle: 'bold',
+        const tag = this.add.text(half - 14, ry, WORLD_TAG[themeName], {
+          fontFamily: 'monospace', fontSize: `${px(Phaser.Math.Clamp(13 * sc, 10, 13))}px`, color: '#ffe7b0', fontStyle: 'bold',
         }).setOrigin(1, 0.5).setAlpha(0.9);
         c.add(tag);
       }
@@ -156,8 +173,8 @@ export default class CupSelectScene extends Phaser.Scene {
     c.add(border);
 
     // "Pick" hint at the bottom (only shown on the selected panel).
-    const hint = this.add.text(0, h / 2 - 28, '▶  PRESS SPACE', {
-      fontFamily: 'monospace', fontSize: '16px', color: '#ffffff', fontStyle: 'bold',
+    const hint = this.add.text(0, h / 2 - 26, '▶  PRESS SPACE', {
+      fontFamily: 'monospace', fontSize: `${px(15 * sc)}px`, color: '#ffffff', fontStyle: 'bold',
       stroke: '#000000', strokeThickness: 4,
     }).setOrigin(0.5).setVisible(false);
     c.add(hint);
@@ -166,29 +183,27 @@ export default class CupSelectScene extends Phaser.Scene {
       .on('pointerover', () => { if (this.cursor !== index) { this.cursor = index; Audio.sfx('beep'); this.redraw(); } })
       .on('pointerdown', () => { this.cursor = index; this.confirm(); });
 
-    return { cup, index, container: c, border, hint, w, h, badge, targetScale: 1 };
+    return { cup, index, container: c, border, hint, w, h, badge, badgeY: top + 14 + hdH / 2, targetScale: 1 };
   }
 
   // A mini top-down racetrack tile: a road loop on the world's terrain, with
   // edge lines and a tiny start/finish checker — using that world's real colours.
-  drawSwatch(c, x, y, themeName) {
+  drawSwatch(c, x, y, themeName, s = 18) {
     const t = THEMES.find((th) => th.name === themeName) || THEMES[0];
-    const s = 18;
     const g = this.add.graphics();
-    // Terrain tile (also the infield once the loop is drawn over it).
     g.fillStyle(t.terrain, 1); g.fillRoundedRect(x - s, y - s, s * 2, s * 2, 6);
 
-    // Oval loop: an edge ring, then the road ring on top (edge peeks out 2px).
-    const ow = 26; const oh = 21; // ellipse diameters
-    g.lineStyle(11, t.edge, 1); g.strokeEllipse(x, y, ow, oh);
-    g.lineStyle(7, t.road, 1); g.strokeEllipse(x, y, ow, oh);
+    const ow = s * 1.45; const oh = s * 1.15;
+    g.lineStyle(s * 0.6, t.edge, 1); g.strokeEllipse(x, y, ow, oh);
+    g.lineStyle(s * 0.4, t.road, 1); g.strokeEllipse(x, y, ow, oh);
 
     // Start/finish checker across the top of the loop.
-    const sy = y - oh / 2 - 4;
+    const cell = Math.max(1.5, s * 0.12);
+    const sy = y - oh / 2 - cell;
     for (let col = 0; col < 2; col += 1) {
       for (let row = 0; row < 4; row += 1) {
         g.fillStyle((col + row) % 2 ? 0x101014 : 0xffffff, 1);
-        g.fillRect(x - 2 + col * 2, sy + row * 2, 2, 2);
+        g.fillRect(x - cell + col * cell, sy + row * cell, cell, cell);
       }
     }
 
@@ -200,7 +215,7 @@ export default class CupSelectScene extends Phaser.Scene {
   redraw() {
     this.panels.forEach((p, i) => {
       const sel = i === this.cursor;
-      p.targetScale = sel ? 1.035 : 0.97;
+      p.targetScale = sel ? 1.03 : 0.965;
       p.hint.setVisible(sel);
     });
   }
@@ -215,13 +230,13 @@ export default class CupSelectScene extends Phaser.Scene {
         const pulse = 0.5 + 0.5 * Math.sin(this.t * 6);
         const glow = CUP_GLOW[i] || 0xffffff;
         g.lineStyle(7, glow, 0.55 + 0.45 * pulse);
-        g.strokeRoundedRect(-w / 2 - 3, top - 3, w + 6, h + 6, 26);
+        g.strokeRoundedRect(-w / 2 - 3, top - 3, w + 6, h + 6, 24);
         g.lineStyle(3, 0xffffff, 1);
-        g.strokeRoundedRect(-w / 2, top, w, h, 24);
+        g.strokeRoundedRect(-w / 2, top, w, h, 22);
         p.hint.setAlpha(0.65 + 0.35 * pulse);
       } else {
         g.lineStyle(3, 0xffffff, 0.4);
-        g.strokeRoundedRect(-w / 2, top, w, h, 24);
+        g.strokeRoundedRect(-w / 2, top, w, h, 22);
       }
     });
   }
@@ -235,11 +250,10 @@ export default class CupSelectScene extends Phaser.Scene {
 
   update(time, deltaMs) {
     this.t += deltaMs / 1000;
-    // Smoothly ease each panel toward its target scale + bob the selected badge.
     this.panels.forEach((p, i) => {
       const s = Phaser.Math.Linear(p.container.scale, p.targetScale, 0.18);
       p.container.setScale(s);
-      p.badge.y = (-p.h / 2 + 53) + (i === this.cursor ? Math.sin(this.t * 4) * 3 : 0);
+      p.badge.y = p.badgeY + (i === this.cursor ? Math.sin(this.t * 4) * 3 : 0);
     });
     this.drawChrome();
 
@@ -263,20 +277,17 @@ export default class CupSelectScene extends Phaser.Scene {
       g.fillStyle(Phaser.Display.Color.GetColor(col.r, col.g, col.b), 1);
       g.fillRect(0, Math.floor((i * H) / bands), W, Math.ceil(H / bands) + 1);
     }
-    // Soft diagonal speed streaks.
     g.fillStyle(0xffffff, 0.04);
     for (let k = -2; k < 12; k += 1) {
       const x = k * 150;
       g.fillTriangle(x, H, x + 70, H, x + 240, 0);
     }
-    // Sparkles (deterministic scatter).
     let seed = 1234;
     const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
     for (let i = 0; i < 70; i += 1) {
       g.fillStyle(0xffffff, 0.12 + rnd() * 0.32);
       g.fillCircle(rnd() * W, rnd() * H * 0.92, rnd() * 1.6 + 0.5);
     }
-    // Checkered strip across the top.
     const cell = 16;
     for (let cI = 0; cI * cell < W; cI += 1) {
       g.fillStyle(cI % 2 ? 0x111111 : 0xffffff, 0.9); g.fillRect(cI * cell, 0, cell, cell / 2);

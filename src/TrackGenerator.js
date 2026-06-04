@@ -14,7 +14,9 @@
 //   wind:    lateral gust strength (px/s)
 //   boostPads/slowPatches/oilPatches/lowVis: on-road features
 //   hazard:  lightning | geyser | null   (timed telegraphed hazards)
-//   hard:    tighter/narrower generation; roadWidth overrides the default
+//   movers/currents/bouncePads/fogPatches: Adventure-cup signature mechanics
+//   twist:   generation difficulty 0 (gentle) | 1 (medium) | 2 (tight); legacy
+//            `hard: true` is treated as twist 2. roadWidth overrides the default.
 const DEFAULT_ROAD_WIDTH = 143;
 export const THEMES = [
   // --- Starter Cup ---
@@ -22,6 +24,11 @@ export const THEMES = [
   { name: 'Beach', terrain: 0xf3e1a6, road: 0x70747f, edge: 0xffffff, deco: 0x2fa39a, decoAlt: 0x57d6c4, offRoad: 'sand' },
   { name: 'Ice', terrain: 0xdfeefb, road: 0x8fa9c4, edge: 0xffffff, deco: 0xa9d3f5, decoAlt: 0xffffff, offRoad: 'ice' },
   { name: 'Candy', terrain: 0xffc1e3, road: 0x9b6bce, edge: 0xffffff, deco: 0xff5fa2, decoAlt: 0xfff04d, offRoad: 'grass' },
+  // --- Adventure Cup (medium) ---
+  { name: 'Desert', terrain: 0xe3b96a, road: 0x8f7350, edge: 0xfff2cf, deco: 0x9c5a2a, decoAlt: 0x4f8a3a, offRoad: 'sand', movers: 'tumbleweed', roadWidth: 134, twist: 1 },
+  { name: 'Coral', terrain: 0x0d5f72, road: 0x8fd6cf, edge: 0xeafff8, deco: 0xff6f91, decoAlt: 0x3fe0c8, offRoad: 'sand', currents: true, roadWidth: 138, twist: 1 },
+  { name: 'Haunted', terrain: 0x1c1430, road: 0x3a3550, edge: 0x9d7bd6, deco: 0x121022, decoAlt: 0x6ad0a0, offRoad: 'mud', fogPatches: true, roadWidth: 132, twist: 1 },
+  { name: 'Carnival', terrain: 0x3aa65f, road: 0x46465f, edge: 0xffd23f, deco: 0xe2403a, decoAlt: 0x49c2e8, offRoad: 'grass', boostPads: true, bouncePads: true, roadWidth: 136, twist: 1 },
   // --- Pro Cup ---
   { name: 'Volcano', terrain: 0x7a1f08, road: 0x2f2b2b, edge: 0xffb24d, deco: 0x1c1a1a, decoAlt: 0xff7a1a, offRoad: 'fatal', boostPads: true, hazard: 'geyser', hard: true, roadWidth: 120 },
   { name: 'Storm', terrain: 0x39434b, road: 0x44474f, edge: 0xcfe0ee, deco: 0x2b3640, decoAlt: 0x8fa6b4, offRoad: 'grass', grip: 0.55, wind: 130, hazard: 'lightning', hard: true, roadWidth: 126 },
@@ -341,13 +348,20 @@ function buildRails(centerline, halfWidth) {
   return rails;
 }
 
-function tryGenerate(width, height, halfWidth, roadWidth, hard) {
+function tryGenerate(width, height, halfWidth, roadWidth, twist) {
   const margin = halfWidth + 140;
   const bounds = { minX: margin, minY: margin, maxX: width - margin, maxY: height - margin };
 
-  // Hard tracks pack in more corners: more control points, bigger fine wiggles
-  // and tighter point separation so the racing line winds more.
-  const count = hard ? randInt(16, 22) : randInt(14, 20);
+  // Higher twist packs in more corners: more control points, bigger fine wiggles
+  // and tighter point separation so the racing line winds more. twist 0/1/2 maps
+  // to gentle (Starter) / medium (Adventure) / tight (Pro).
+  const tw = twist === 1 ? 1 : twist >= 2 ? 2 : 0;
+  const countLo = [14, 15, 16][tw]; const countHi = [20, 21, 22][tw];
+  const sep1 = [420, 390, 360][tw]; const disp1 = [300, 320, 340][tw];
+  const sep2 = [230, 212, 195][tw]; const disp2 = [150, 170, 190][tw];
+  const sep3 = [130, 119, 108][tw];
+
+  const count = randInt(countLo, countHi);
   const points = [];
   for (let i = 0; i < count; i += 1) {
     points.push({ x: randFloat(bounds.minX, bounds.maxX), y: randFloat(bounds.minY, bounds.maxY) });
@@ -356,11 +370,11 @@ function tryGenerate(width, height, halfWidth, roadWidth, hard) {
   let pts = convexHull(points);
   if (pts.length < 6) return null;
 
-  pushApart(pts, hard ? 360 : 420, 14, bounds);
-  pts = displaceMidpoints(pts, hard ? 340 : 300); // coarse turns (both directions)
-  pushApart(pts, hard ? 195 : 230, 12, bounds);
-  pts = displaceMidpoints(pts, hard ? 190 : 150); // finer wiggles → longer, busier route
-  pushApart(pts, hard ? 108 : 130, 8, bounds);
+  pushApart(pts, sep1, 14, bounds);
+  pts = displaceMidpoints(pts, disp1); // coarse turns (both directions)
+  pushApart(pts, sep2, 12, bounds);
+  pts = displaceMidpoints(pts, disp2); // finer wiggles → longer, busier route
+  pushApart(pts, sep3, 8, bounds);
 
   // Validate the smoothed loop, not just the control polygon.
   let centerline = sampleClosedSpline(pts, 8);
@@ -378,13 +392,13 @@ function tryGenerate(width, height, halfWidth, roadWidth, hard) {
 }
 
 // Guaranteed-valid fallback if every random attempt is rejected.
-function fallbackTrack(width, height, halfWidth, roadWidth, hard) {
+function fallbackTrack(width, height, halfWidth, roadWidth, twist) {
   const cx = width / 2;
   const cy = height / 2;
   const rx = cx - (halfWidth + 160);
   const ry = cy - (halfWidth + 160);
   const ctrl = [];
-  const n = hard ? 11 : 9;
+  const n = [9, 10, 11][twist === 1 ? 1 : twist >= 2 ? 2 : 0];
   for (let i = 0; i < n; i += 1) {
     const ang = (i / n) * Math.PI * 2;
     const r = 0.7 + 0.3 * Math.sin(ang * 3); // gentle in/out variation
@@ -406,11 +420,11 @@ export function generateTrack(width, height, themeName) {
     : THEMES[randInt(0, THEMES.length - 1)];
   const roadWidth = theme.roadWidth || DEFAULT_ROAD_WIDTH;
   const halfWidth = roadWidth / 2;
-  const hard = !!theme.hard;
+  const twist = theme.twist != null ? theme.twist : (theme.hard ? 2 : 0);
   let base = null;
   for (let attempt = 0; attempt < 80 && !base; attempt += 1) {
-    base = tryGenerate(width, height, halfWidth, roadWidth, hard);
+    base = tryGenerate(width, height, halfWidth, roadWidth, twist);
   }
-  if (!base) base = fallbackTrack(width, height, halfWidth, roadWidth, hard);
+  if (!base) base = fallbackTrack(width, height, halfWidth, roadWidth, twist);
   return { ...base, theme };
 }

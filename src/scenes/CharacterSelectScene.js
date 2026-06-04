@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { ROSTER, initGrandPrix, CUPS } from '../GrandPrix.js';
+import { ROSTER, initGrandPrix, cupById } from '../GrandPrix.js';
 import { makeKartTexture } from '../textures.js';
 import * as Audio from '../Audio.js';
 import { addMuteButton } from '../ui.js';
@@ -99,12 +99,12 @@ export default class CharacterSelectScene extends Phaser.Scene {
   // AI difficulty → Settings, which returns straight back here).
   makeConfigChips(y) {
     const W = this.scale.width;
-    const cupName = (CUPS[this.cup === 2 ? 1 : 0] || CUPS[0]).name;
-    const cupIcon = this.cup === 2 ? '🏁' : '🌱';
+    const cupData = cupById(this.cup);
+    const cupAccent = { 1: 0x7be07b, 2: 0x49c6e0, 3: 0xff8a3c }[this.cup] || 0xffffff;
     const speed = (this.registry.get('carSpeed') || 'medium').toUpperCase();
     const diff = (this.registry.get('difficulty') || 'medium').toUpperCase();
     const chips = [
-      { label: `${cupIcon} ${cupName}`, accent: this.cup === 2 ? 0xff8a3c : 0x7be07b, onClick: () => this.editCup() },
+      { label: `${cupData.icon || '🏁'} ${cupData.name}`, accent: cupAccent, onClick: () => this.editCup() },
       { label: `🏎 SPEED ${speed}`, accent: 0x8be8f0, onClick: () => this.editSettings() },
       { label: `🤖 ${diff} AI`, accent: 0x8be8f0, onClick: () => this.editSettings() },
     ];

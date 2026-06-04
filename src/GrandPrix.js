@@ -20,13 +20,18 @@ export const LAPS = 3; // laps per race
 // Overall car-speed setting: slow is 20% slower, fast is 10% faster than medium.
 export const CAR_SPEEDS = { slow: 0.72, medium: 1.0, fast: 1.1 };
 
-// Two cups of four worlds. The Pro Cup is harder (narrower, twistier tracks
-// with punishing per-world physics). Cup index is 1-based in the UI.
+// Three cups of four worlds, easiest → hardest. Adventure sits in the middle:
+// medium roads, gentler-than-Pro twist, and one fair signature mechanic each.
 export const CUPS = [
-  { id: 1, name: 'STARTER CUP', sub: 'Friendly & forgiving', themes: ['Grassy', 'Beach', 'Ice', 'Candy'] },
-  { id: 2, name: 'PRO CUP', sub: 'Hazards & harder tracks', themes: ['Volcano', 'Storm', 'Jungle', 'Neon'] },
+  { id: 1, name: 'STARTER CUP', sub: 'Friendly & forgiving', icon: '🌱', themes: ['Grassy', 'Beach', 'Ice', 'Candy'] },
+  { id: 2, name: 'ADVENTURE CUP', sub: 'Wild places, fair tests', icon: '🧭', themes: ['Desert', 'Coral', 'Haunted', 'Carnival'] },
+  { id: 3, name: 'PRO CUP', sub: 'Hazards & harder tracks', icon: '🏁', themes: ['Volcano', 'Storm', 'Jungle', 'Neon'] },
 ];
 export const ALL_THEMES = CUPS[0].themes;
+
+export function cupById(id) {
+  return CUPS.find((c) => c.id === id) || CUPS[0];
+}
 
 function shuffle(arr) {
   const a = arr.slice();
@@ -52,13 +57,13 @@ export function initGrandPrix(registry, playerCount, picks, cup) {
 
   const points = {};
   lineup.forEach((idx) => { points[ROSTER[idx].id] = 0; });
-  const cupIndex = cup === 2 ? 1 : 0;
-  const themeOrder = shuffle(CUPS[cupIndex].themes);
+  const chosenCup = cupById(cup);
+  const themeOrder = shuffle(chosenCup.themes);
   // Konami-unlocked secret: a 5th race on Rainbow Road, always last.
   if (registry.get('rainbow')) themeOrder.push('Rainbow');
   registry.set('gp', {
     playerCount,
-    cup: CUPS[cupIndex].id,
+    cup: chosenCup.id,
     raceIndex: 0,
     themeOrder,
     points,

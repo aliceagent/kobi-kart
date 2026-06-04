@@ -71,6 +71,11 @@ export default class RaceScene extends Phaser.Scene {
     this.windPhase = 0;
     this.windX = 0;
     this.windY = 0;
+    // Adventure-cup mechanics.
+    this.currents = [];      // Coral: directional flow zones
+    this.bouncePads = [];    // Carnival: springy bumpers
+    this.movers = [];        // Desert: rolling tumbleweeds
+    this.fogPatches = [];    // Haunted: drifting fog banks
 
     makeGameTextures(this);
     ROSTER.forEach((r) => makeKartTexture(this, `kart_${r.id}`, r.color, r.trim));
@@ -79,7 +84,10 @@ export default class RaceScene extends Phaser.Scene {
     this.createRacers();
     this.createItemBoxes();
     this.createHazards();
+    this.createMovers();
+    this.createFog();
     this.hazardGfx = this.add.graphics().setDepth(13); // telegraphs + eruptions + bolts
+    this.fogGfx = this.add.graphics().setDepth(14);     // drifting fog (above karts)
 
     this.projectiles = [];
     this.traps = [];
@@ -732,6 +740,8 @@ export default class RaceScene extends Phaser.Scene {
     this.racers.forEach((r) => this.driveRacer(r, dt, false));
     this.racers.forEach((r) => this.applyRoadFeatures(r));
     this.updateHazards(dt);
+    this.updateMovers(dt);
+    this.updateFog(dt);
 
     // Collisions among all racers (falling karts are intangible).
     for (let i = 0; i < this.racers.length; i += 1) {
@@ -962,6 +972,17 @@ export default class RaceScene extends Phaser.Scene {
       kart.x += this.windX * dt;
       kart.y += this.windY * dt;
     }
+    // Currents (Coral): flow zones push the kart along the seabed. Forward-flow
+    // zones are free speed; cross-flow zones nudge you toward the wall.
+    if (this.currents.length && !kart.falling && !kart.spunOut) {
+      for (const cur of this.currents) {
+        if ((kart.x - cur.x) ** 2 + (kart.y - cur.y) ** 2 < cur.r * cur.r) {
+          kart.x += cur.dx * cur.strength * dt;
+          kart.y += cur.dy * cur.strength * dt;
+          break;
+        }
+      }
+    }
   }
 
   // Surface descriptor for the kart this frame: off-road type, on-road grip
@@ -1005,6 +1026,22 @@ export default class RaceScene extends Phaser.Scene {
           const dy = sp > 20 ? kart.vy / sp : Math.sin(kart.heading);
           kart.knockX += dx * 170; kart.knockY += dy * 170;
           kart.oilImmune = 2.6;
+          break;
+        }
+      }
+    }
+    // Bounce pads (Carnival): springy bumpers fling you away from their centre.
+    if (this.bouncePads.length && kart.bounceCd <= 0) {
+      for (const pad of this.bouncePads) {
+        const dx = kart.x - pad.x;
+        const dy = kart.y - pad.y;
+        if (dx * dx + dy * dy < pad.r * pad.r) {
+          const d = Math.hypot(dx, dy) || 1;
+          kart.knockX += (dx / d) * 320; kart.knockY += (dy / d) * 320;
+          kart.padBoostTimer = Math.max(kart.padBoostTimer, 0.2);
+          kart.bounceCd = 0.5;
+          this.burst(pad.x, pad.y, 0xffe14d);
+          if (!kart.isAI) Audio.sfx('bump');
           break;
         }
       }
@@ -1251,6 +1288,34 @@ export default class RaceScene extends Phaser.Scene {
         this.drawSlowPatch(g, s);
       }
     }
+
+    // Coral currents: forward-flow zones (free speed) and cross-flow zones
+    // (push you toward a wall — counter-steer). Telegraphed by seabed chevrons.
+    if (this.theme.currents) {
+      const count = 7;
+      for (let i = 0; i < count; i += 1) {
+        const frac = 0.1 + ((i + 0.5) / count) * 0.8;
+        const c = at(frac, 0, 0);
+        const nx = -c.ty; const ny = c.tx;
+        if (i % 3 === 0) { const s = (i % 2) ? 1 : -1; c.dx = nx * s; c.dy = ny * s; c.strength = 95; c.cross = true; }
+        else { c.dx = c.tx; c.dy = c.ty; c.strength = 150; c.cross = false; }
+        c.r = 40;
+        this.currents.push(c);
+        this.drawCurrent(g, c);
+      }
+    }
+
+    // Carnival bounce pads: springy bumpers placed to the side of the line.
+    if (this.theme.bouncePads) {
+      const count = 6;
+      for (let i = 0; i < count; i += 1) {
+        const frac = 0.12 + ((i + 0.4) / count) * 0.78;
+        const pad = at(frac, (i % 2) ? 1 : -1, 0.45);
+        pad.r = 26;
+        this.bouncePads.push(pad);
+        this.drawBouncePad(g, pad);
+      }
+    }
   }
 
   drawBoostPad(g, pad, tint) {
@@ -1279,5 +1344,129 @@ export default class RaceScene extends Phaser.Scene {
     g.fillStyle(0x3a2a16, 0.85); g.fillCircle(s.x, s.y, s.r);
     g.fillStyle(0x55401f, 0.7); g.fillCircle(s.x - s.r * 0.3, s.y + s.r * 0.2, s.r * 0.55);
     g.fillStyle(0x241809, 0.6); g.fillCircle(s.x + s.r * 0.25, s.y - s.r * 0.25, s.r * 0.4);
+  }
+
+  // Seabed flow marker: a faint disc + chevrons pointing the way the water pushes.
+  drawCurrent(g, c) {
+    const dx = c.dx; const dy = c.dy;
+    const nx = -dy; const ny = dx;
+    const col = c.cross ? 0xffd23f : 0x7ffff0;
+    g.fillStyle(col, 0.12); g.fillCircle(c.x, c.y, c.r);
+    g.lineStyle(3, col, 0.8);
+    for (let k = 0; k < 3; k += 1) {
+      const bx = c.x + dx * (k * 13 - 16);
+      const by = c.y + dy * (k * 13 - 16);
+      g.beginPath();
+      g.moveTo(bx - nx * 11 - dx * 7, by - ny * 11 - dy * 7);
+      g.lineTo(bx + dx * 7, by + dy * 7);
+      g.lineTo(bx + nx * 11 - dx * 7, by + ny * 11 - dy * 7);
+      g.strokePath();
+    }
+  }
+
+  // Carnival bumper: bright concentric springy rings.
+  drawBouncePad(g, pad) {
+    g.fillStyle(0xffffff, 0.95); g.fillCircle(pad.x, pad.y, pad.r);
+    g.fillStyle(0xe2403a, 1); g.fillCircle(pad.x, pad.y, pad.r * 0.78);
+    g.fillStyle(0xffd23f, 1); g.fillCircle(pad.x, pad.y, pad.r * 0.5);
+    g.fillStyle(0xffffff, 1); g.fillCircle(pad.x, pad.y, pad.r * 0.22);
+    g.lineStyle(2, 0x9a2a25, 1); g.strokeCircle(pad.x, pad.y, pad.r);
+  }
+
+  // -------------------------------------------------------- movers (desert) ----
+  createMovers() {
+    if (this.theme.movers !== 'tumbleweed') return;
+    for (let i = 0; i < 6; i += 1) {
+      const m = { sprite: this.add.image(0, 0, 'tumbleweed').setDepth(9).setScale(0.9), spin: 0 };
+      this.respawnMover(m, 0.12 + (i / 6) * 0.76);
+      this.movers.push(m);
+    }
+  }
+
+  // Park a tumbleweed just off one side of the road, rolling across to the other.
+  respawnMover(m, frac) {
+    const cl = this.centerline;
+    const n = cl.length;
+    const f = frac != null ? frac : Math.random();
+    const idx = Math.round(f * n) % n;
+    const p = cl[idx];
+    const pn = cl[(idx + 1) % n];
+    let tx = pn.x - p.x; let ty = pn.y - p.y;
+    const tl = Math.hypot(tx, ty) || 1; tx /= tl; ty /= tl;
+    const nx = -ty; const ny = tx;
+    const side = Math.random() < 0.5 ? 1 : -1;
+    const speed = 70 + Math.random() * 50;
+    m.x = p.x + nx * side * (this.halfWidth + 36);
+    m.y = p.y + ny * side * (this.halfWidth + 36);
+    m.vx = -nx * side * speed + tx * (Math.random() - 0.5) * 40;
+    m.vy = -ny * side * speed + ty * (Math.random() - 0.5) * 40;
+    m.r = 14;
+    m.life = 0;
+  }
+
+  updateMovers(dt) {
+    for (const m of this.movers) {
+      m.x += m.vx * dt;
+      m.y += m.vy * dt;
+      m.life += dt;
+      m.spin += dt * 7;
+      m.sprite.setPosition(m.x, m.y);
+      m.sprite.rotation = m.spin;
+      // Bounce off rails so they tumble believably along the canyon.
+      for (const s of this.rails) {
+        const c = closestOnSeg(m.x, m.y, s.ax, s.ay, s.bx, s.by);
+        const dx = m.x - c.x; const dy = m.y - c.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist < m.r + 6 && dist > 0.0001) {
+          const nx = dx / dist; const ny = dy / dist;
+          m.x = c.x + nx * (m.r + 6); m.y = c.y + ny * (m.r + 6);
+          const vd = m.vx * nx + m.vy * ny;
+          if (vd < 0) { m.vx -= 2 * vd * nx; m.vy -= 2 * vd * ny; }
+        }
+      }
+      // Gentle bump on contact — knock the kart, shave its speed (no spin-out).
+      for (const r of this.racers) {
+        if (r.finished || r.falling) continue;
+        const dx = r.x - m.x; const dy = r.y - m.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist < r.radius + m.r && dist > 0.0001) {
+          const nx = dx / dist; const ny = dy / dist;
+          r.knockX += nx * 150; r.knockY += ny * 150;
+          r.speed *= 0.78;
+          m.vx -= nx * 120; m.vy -= ny * 120; // tumbleweed deflects away
+          if (!r.isAI) Audio.sfx('bump');
+        }
+      }
+      // Drifted well clear of the track (or stalled) → roll a fresh one in.
+      if (m.life > 1 && this.minDistSqToCenterline(m.x, m.y) > (this.halfWidth + 80) ** 2) this.respawnMover(m);
+      if (m.x < -40 || m.x > WORLD_W + 40 || m.y < -40 || m.y > WORLD_H + 40) this.respawnMover(m);
+    }
+  }
+
+  // ---------------------------------------------------------- fog (haunted) ----
+  createFog() {
+    if (!this.theme.fogPatches) return;
+    const cl = this.centerline;
+    const n = cl.length;
+    for (let i = 0; i < 6; i += 1) {
+      const idx = Math.round((0.08 + (i / 6) * 0.84) * n) % n;
+      const p = cl[idx];
+      this.fogPatches.push({ ax: p.x, ay: p.y, r: 78, phase: i * 1.3 });
+    }
+  }
+
+  updateFog(dt) {
+    const g = this.fogGfx;
+    if (!g) return;
+    g.clear();
+    if (!this.fogPatches.length) return;
+    this.fogPhase = (this.fogPhase || 0) + dt;
+    for (const f of this.fogPatches) {
+      const x = f.ax + Math.sin(this.fogPhase * 0.3 + f.phase) * 34;
+      const y = f.ay + Math.cos(this.fogPhase * 0.23 + f.phase) * 28;
+      g.fillStyle(0xb9c4d8, 0.16); g.fillCircle(x, y, f.r);
+      g.fillStyle(0xc7d2e4, 0.18); g.fillCircle(x - f.r * 0.2, y, f.r * 0.72);
+      g.fillStyle(0xdfe6f2, 0.2); g.fillCircle(x + f.r * 0.18, y - f.r * 0.1, f.r * 0.46);
+    }
   }
 }

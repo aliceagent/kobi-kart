@@ -141,4 +141,30 @@ export function makeGameTextures(scene) {
     g.generateTexture('spark', 8, 8);
     g.destroy();
   }
+
+  // Tumbleweed: a tangled ball of dry twigs (Desert moving obstacle).
+  if (!scene.textures.exists('tumbleweed')) {
+    const s = 30;
+    const c = s / 2;
+    const g = scene.make.graphics({ x: 0, y: 0, add: false });
+    g.fillStyle(0x6e4a22, 0.35); g.fillCircle(c, c, c - 1);
+    g.lineStyle(2, 0x8a5e2c, 1);
+    for (let k = 0; k < 9; k += 1) {
+      const a = (k / 9) * Math.PI * 2;
+      g.beginPath();
+      g.moveTo(c + Math.cos(a) * 2, c + Math.sin(a) * 2);
+      g.lineTo(c + Math.cos(a + 0.6) * (c - 1), c + Math.sin(a + 0.6) * (c - 1));
+      g.strokePath();
+    }
+    g.lineStyle(1.5, 0xb0823f, 1);
+    for (let k = 0; k < 7; k += 1) {
+      const a = (k / 7) * Math.PI * 2 + 0.4;
+      g.beginPath();
+      g.moveTo(c + Math.cos(a) * (c * 0.3), c + Math.sin(a) * (c * 0.3));
+      g.lineTo(c + Math.cos(a - 0.5) * (c - 2), c + Math.sin(a - 0.5) * (c - 2));
+      g.strokePath();
+    }
+    g.generateTexture('tumbleweed', s, s);
+    g.destroy();
+  }
 }

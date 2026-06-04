@@ -64,6 +64,7 @@ export default class Kart {
     this.itemBoostTimer = 0;
     this.padBoostTimer = 0; // brief boost from a speed strip / boost pad
     this.oilImmune = 0; // grace after an oil-slick spin so it can't trap you
+    this.bounceCd = 0; // cooldown so a bounce pad fires once per touch
     this.heldItem = null;
     this.stuckTimer = 0; // time spent wedged off-track (for auto-rescue)
     this.falling = false; // falling off Rainbow Road into space
@@ -112,6 +113,7 @@ export default class Kart {
 
     if (this.itemBoostTimer > 0) this.itemBoostTimer -= dt;
     if (this.padBoostTimer > 0) this.padBoostTimer -= dt;
+    if (this.bounceCd > 0) this.bounceCd -= dt;
     if (this.oilImmune > 0) this.oilImmune -= dt;
     if (this.shieldTimer > 0) this.shieldTimer -= dt;
 
