@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { LAPS } from '../GrandPrix.js';
 import { TUNE } from '../Kart.js';
 import { addMuteButton } from '../ui.js';
+import * as Audio from '../Audio.js';
 
 function ordinal(n) {
   return ['1st', '2nd', '3rd', '4th'][n - 1] || `${n}th`;
@@ -20,6 +21,9 @@ export default class UIScene extends Phaser.Scene {
 
   create() {
     const W = this.scale.width;
+    this.speedGfx = this.add.graphics().setDepth(8); // boost speed-lines (behind HUD)
+    this.lastLeadLap = 0;
+    this.announcedFinalLap = false;
     this.gfx = this.add.graphics().setDepth(10);
 
     this.banner = this.add.text(W / 2, 14, '', {
@@ -188,5 +192,55 @@ export default class UIScene extends Phaser.Scene {
       this.drawBar(W - 16, 34, h1, h1.color, true);
       this.drawItemBox(W - 16 - 42, 54, 42, h1.heldItem, h1.color);
     }
+
+    // Boost speed-lines: intensity from the fastest human's boost state.
+    let boostF = 0;
+    for (const h of race.humans) {
+      if (h.itemBoostTimer > 0) boostF = Math.max(boostF, 1);
+      else if (h.padBoostTimer > 0) boostF = Math.max(boostF, 0.75);
+      else if (h.boosting) boostF = Math.max(boostF, 0.55);
+    }
+    this.drawSpeedLines(paused ? 0 : boostF);
+
+    // "FINAL LAP!" stinger the moment the lead human starts their last lap.
+    if (race.state === 'racing' && race.humans.length && !this.announcedFinalLap) {
+      const maxLap = race.humans.reduce((m, h) => Math.max(m, h.lap), 0);
+      if (maxLap >= LAPS - 1) { this.announcedFinalLap = true; this.showFinalLap(); }
+    }
+  }
+
+  drawSpeedLines(factor) {
+    const g = this.speedGfx;
+    g.clear();
+    if (factor <= 0) return;
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const cx = W / 2;
+    const cy = H / 2;
+    const ph = (this.race.elapsed || 0);
+    const n = 20;
+    const r1 = Math.max(W, H) * 0.42;
+    g.lineStyle(2, 0xffffff, 0.08 + 0.12 * factor);
+    for (let i = 0; i < n; i += 1) {
+      const a = (i / n) * Math.PI * 2 + Math.sin(ph * 5 + i) * 0.04;
+      const r2 = r1 + (34 + Math.abs(Math.sin(ph * 9 + i * 1.3)) * 36) * factor;
+      g.beginPath();
+      g.moveTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
+      g.lineTo(cx + Math.cos(a) * r2, cy + Math.sin(a) * r2);
+      g.strokePath();
+    }
+  }
+
+  showFinalLap() {
+    Audio.sfx('finallap');
+    const W = this.scale.width;
+    const H = this.scale.height;
+    this.race.cameras.main.flash(180, 255, 230, 120);
+    const t = this.add.text(W / 2, H * 0.4, 'FINAL LAP!', {
+      fontFamily: 'monospace', fontSize: '52px', color: '#ffe14d', fontStyle: 'bold',
+      stroke: '#c0392b', strokeThickness: 8,
+    }).setOrigin(0.5).setDepth(40);
+    this.tweens.add({ targets: t, scale: { from: 0.4, to: 1.15 }, duration: 450, ease: 'Back.Out' });
+    this.tweens.add({ targets: t, alpha: { from: 1, to: 0 }, delay: 1400, duration: 700, onComplete: () => t.destroy() });
   }
 }

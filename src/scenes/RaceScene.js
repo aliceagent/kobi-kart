@@ -88,6 +88,8 @@ export default class RaceScene extends Phaser.Scene {
     this.createFog();
     this.hazardGfx = this.add.graphics().setDepth(13); // telegraphs + eruptions + bolts
     this.fogGfx = this.add.graphics().setDepth(14);     // drifting fog (above karts)
+    this.skidGfx = this.add.graphics().setDepth(1);     // drift skid marks (just above road)
+    this.skidMarks = [];
 
     this.projectiles = [];
     this.traps = [];
@@ -743,6 +745,8 @@ export default class RaceScene extends Phaser.Scene {
     this.updateHazards(dt);
     this.updateMovers(dt);
     this.updateFog(dt);
+    this.updateSkids(dt);
+    this.shakeOnHit();
 
     // Collisions among all racers (falling karts are intangible).
     for (let i = 0; i < this.racers.length; i += 1) {
@@ -1070,9 +1074,48 @@ export default class RaceScene extends Phaser.Scene {
   releaseMiniTurbo(kart) {
     if (!kart.miniTurbo) return;
     const tier = TUNE.driftTiers[kart.miniTurbo - 1];
+    const t = kart.miniTurbo;
     kart.miniTurbo = 0;
     this.burst(kart.x, kart.y, tier ? tier.color : 0xffffff);
-    if (!kart.isAI) Audio.sfx('boost');
+    if (!kart.isAI) {
+      Audio.sfx('boost');
+      if (t >= 3) this.cameras.main.shake(140, 0.004); // a little punch on an ultra
+    }
+  }
+
+  // Drift skid marks: dark dabs laid at the rear wheels of any drifting kart,
+  // fading over ~2s. Bounded so the buffer never grows unbounded.
+  updateSkids(dt) {
+    for (const r of this.racers) {
+      if (r.drifting && !r.falling) {
+        const bx = r.x - Math.cos(r.heading) * 13;
+        const by = r.y - Math.sin(r.heading) * 13;
+        const nx = -Math.sin(r.heading);
+        const ny = Math.cos(r.heading);
+        this.skidMarks.push({ x: bx + nx * 8, y: by + ny * 8, life: 2 });
+        this.skidMarks.push({ x: bx - nx * 8, y: by - ny * 8, life: 2 });
+      }
+    }
+    if (this.skidMarks.length > 520) this.skidMarks.splice(0, this.skidMarks.length - 520);
+    const g = this.skidGfx;
+    g.clear();
+    for (let i = this.skidMarks.length - 1; i >= 0; i -= 1) {
+      const m = this.skidMarks[i];
+      m.life -= dt;
+      if (m.life <= 0) { this.skidMarks.splice(i, 1); continue; }
+      g.fillStyle(0x101012, Math.min(0.45, m.life * 0.22));
+      g.fillCircle(m.x, m.y, 3.6);
+    }
+  }
+
+  // Gentle camera shake the instant a human kart gets spun out (shell, oil,
+  // lightning, geyser — any source).
+  shakeOnHit() {
+    for (const h of this.humans) {
+      const spun = h.spunOut;
+      if (spun && !h._wasSpun) this.cameras.main.shake(220, 0.011);
+      h._wasSpun = spun;
+    }
   }
 
   drawDynamic() {
@@ -1083,13 +1126,35 @@ export default class RaceScene extends Phaser.Scene {
         g.lineStyle(3, 0x9fe8ff, 0.5 + 0.3 * Math.sin(this.elapsed * 14));
         g.strokeCircle(r.x, r.y, r.radius + 7);
       }
+
+      const bx = r.x - Math.cos(r.heading) * 14;
+      const by = r.y - Math.sin(r.heading) * 14;
+      const nx = -Math.sin(r.heading);
+      const ny = Math.cos(r.heading);
+
+      // Boost flames + a speed-stretch on the kart whenever it's boosting.
+      const boosting = r.itemBoostTimer > 0 || r.padBoostTimer > 0 || r.boosting;
+      if (!r.falling) {
+        const stretched = boosting && !r.spunOut;
+        const tx = stretched ? 1.16 : 1;
+        const ty = stretched ? 0.9 : 1;
+        r.sprite.scaleX += (tx - r.sprite.scaleX) * 0.25;
+        r.sprite.scaleY += (ty - r.sprite.scaleY) * 0.25;
+      }
+      if (boosting && !r.falling) {
+        const hot = r.itemBoostTimer > 0;
+        const len = 18 + (Math.sin(this.elapsed * 50 + r.x) + 1) * 5;
+        const tipx = bx - Math.cos(r.heading) * len;
+        const tipy = by - Math.sin(r.heading) * len;
+        g.fillStyle(hot ? 0xff7a1a : 0xffd23f, 0.85);
+        g.fillTriangle(bx + nx * 7, by + ny * 7, bx - nx * 7, by - ny * 7, tipx, tipy);
+        g.fillStyle(0xfff3b0, 0.9);
+        g.fillTriangle(bx + nx * 4, by + ny * 4, bx - nx * 4, by - ny * 4, bx - Math.cos(r.heading) * (len * 0.55), by - Math.sin(r.heading) * (len * 0.55));
+      }
+
       // Drift sparks at the rear wheels, colour-coded by charge tier.
       if (r.drifting && r.driftSparkTier > 0) {
         const col = TUNE.driftTiers[r.driftSparkTier - 1].color;
-        const bx = r.x - Math.cos(r.heading) * 14;
-        const by = r.y - Math.sin(r.heading) * 14;
-        const nx = -Math.sin(r.heading);
-        const ny = Math.cos(r.heading);
         for (const side of [-1, 1]) {
           const fl = 1.6 + Math.sin(this.elapsed * 40 + side) * 1.2;
           g.fillStyle(0xffffff, 0.9);
