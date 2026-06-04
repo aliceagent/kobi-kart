@@ -19,6 +19,14 @@ export default class SettingsScene extends Phaser.Scene {
     super('SettingsScene');
   }
 
+  init(data) {
+    // When opened from the kart-select screen, Back returns there (with the
+    // chosen cup) instead of all the way out to the title.
+    this.fromCharacter = !!(data && data.from === 'character');
+    this.playerCount = (data && data.playerCount) || 1;
+    this.cup = (data && data.cup) || 1;
+  }
+
   create() {
     const W = this.scale.width;
     const H = this.scale.height;
@@ -49,9 +57,10 @@ export default class SettingsScene extends Phaser.Scene {
       }).setOrigin(0.5).setDepth(5);
 
     this.makeBackButton(W / 2, H * 0.845);
-    this.add.text(W / 2, H - 20, 'Esc or Back to return', {
-      fontFamily: 'monospace', fontSize: '13px', color: '#ffffff',
-    }).setOrigin(0.5).setDepth(5).setAlpha(0.55);
+    this.add.text(W / 2, H - 20,
+      this.fromCharacter ? 'Esc or Back — return to kart select' : 'Esc or Back to return', {
+        fontFamily: 'monospace', fontSize: '13px', color: '#ffffff',
+      }).setOrigin(0.5).setDepth(5).setAlpha(0.55);
 
     this.input.keyboard.on('keydown-ESC', () => this.back());
     addMuteButton(this);
@@ -203,7 +212,11 @@ export default class SettingsScene extends Phaser.Scene {
   }
 
   back() {
-    this.scene.start('TitleScene');
+    if (this.fromCharacter) {
+      this.scene.start('CharacterSelectScene', { playerCount: this.playerCount, cup: this.cup });
+    } else {
+      this.scene.start('TitleScene');
+    }
   }
 
   // ------------------------------------------------------------ background ----

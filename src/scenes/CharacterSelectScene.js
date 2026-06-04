@@ -35,16 +35,8 @@ export default class CharacterSelectScene extends Phaser.Scene {
       stroke: '#000000', strokeThickness: 4,
     }).setOrigin(0.5);
 
-    // Summary of what this Grand Prix is set to: cup, car speed, AI difficulty.
-    const cupName = (CUPS[this.cup === 2 ? 1 : 0] || CUPS[0]).name;
-    const cupIcon = this.cup === 2 ? '🏁' : '🌱';
-    const speed = (this.registry.get('carSpeed') || 'medium').toUpperCase();
-    const diff = (this.registry.get('difficulty') || 'medium').toUpperCase();
-    this.add.text(W / 2, H * 0.185,
-      `${cupIcon} ${cupName}    ·    SPEED ${speed}    ·    ${diff} AI`, {
-        fontFamily: 'monospace', fontSize: '16px', color: '#ffe7b0', fontStyle: 'bold',
-        stroke: '#000000', strokeThickness: 4,
-      }).setOrigin(0.5);
+    // Clickable summary chips — tap any to change cup / speed / AI difficulty.
+    this.makeConfigChips(H * 0.185);
 
     this.makeBackButton();
 
@@ -84,10 +76,14 @@ export default class CharacterSelectScene extends Phaser.Scene {
         .on('pointerdown', () => { if (this.isFree(i)) { this.cursor = i; this.confirm(); } });
     });
 
-    this.add.text(W / 2, H - 26,
+    this.add.text(W / 2, H - 38,
       '←/→  (or A/D) move    ·    SPACE / ENTER / item key  pick    ·    click a car',
       { fontFamily: 'monospace', fontSize: '13px', color: '#ffffff', stroke: '#000000', strokeThickness: 3 })
       .setOrigin(0.5).setAlpha(0.85);
+    this.add.text(W / 2, H - 18,
+      'tap the cup / speed / AI chips above to change them',
+      { fontFamily: 'monospace', fontSize: '12px', color: '#ffe7b0', stroke: '#000000', strokeThickness: 3 })
+      .setOrigin(0.5).setAlpha(0.8);
 
     this.cursor = 0;
     this.setupKeys();
@@ -96,6 +92,59 @@ export default class CharacterSelectScene extends Phaser.Scene {
 
     Audio.resumeAudio();
     this.input.keyboard.on('keydown-ESC', () => this.goBack());
+  }
+
+  // Three pill chips summarising the Grand Prix setup. Each is clickable and
+  // jumps to the screen where that choice is made (cup → Cup Select; speed and
+  // AI difficulty → Settings, which returns straight back here).
+  makeConfigChips(y) {
+    const W = this.scale.width;
+    const cupName = (CUPS[this.cup === 2 ? 1 : 0] || CUPS[0]).name;
+    const cupIcon = this.cup === 2 ? '🏁' : '🌱';
+    const speed = (this.registry.get('carSpeed') || 'medium').toUpperCase();
+    const diff = (this.registry.get('difficulty') || 'medium').toUpperCase();
+    const chips = [
+      { label: `${cupIcon} ${cupName}`, accent: this.cup === 2 ? 0xff8a3c : 0x7be07b, onClick: () => this.editCup() },
+      { label: `🏎 SPEED ${speed}`, accent: 0x8be8f0, onClick: () => this.editSettings() },
+      { label: `🤖 ${diff} AI`, accent: 0x8be8f0, onClick: () => this.editSettings() },
+    ];
+    const pad = 14;
+    const gap = 14;
+    const items = chips.map((ch) => {
+      const txt = this.add.text(0, y, ch.label, {
+        fontFamily: 'monospace', fontSize: '16px', color: '#ffe7b0', fontStyle: 'bold',
+        stroke: '#000000', strokeThickness: 4,
+      }).setOrigin(0.5).setDepth(21);
+      return { ch, txt, w: txt.width + pad * 2 };
+    });
+    const total = items.reduce((s, it) => s + it.w, 0) + gap * (items.length - 1);
+    let x = (W - total) / 2;
+    items.forEach((it) => {
+      const cx = x + it.w / 2;
+      const g = this.add.graphics().setDepth(20);
+      const draw = (hover) => {
+        g.clear();
+        g.fillStyle(0x000000, hover ? 0.5 : 0.3); g.fillRoundedRect(cx - it.w / 2, y - 16, it.w, 32, 9);
+        g.lineStyle(2, it.ch.accent, hover ? 1 : 0.5); g.strokeRoundedRect(cx - it.w / 2, y - 16, it.w, 32, 9);
+      };
+      draw(false);
+      it.txt.setX(cx);
+      this.add.zone(cx, y, it.w, 32).setInteractive({ useHandCursor: true })
+        .on('pointerover', () => { draw(true); it.txt.setScale(1.05); })
+        .on('pointerout', () => { draw(false); it.txt.setScale(1); })
+        .on('pointerdown', it.ch.onClick);
+      x += it.w + gap;
+    });
+  }
+
+  editCup() {
+    Audio.sfx('beep');
+    this.scene.start('CupSelectScene', { playerCount: this.playerCount });
+  }
+
+  editSettings() {
+    Audio.sfx('beep');
+    this.scene.start('SettingsScene', { from: 'character', playerCount: this.playerCount, cup: this.cup });
   }
 
   // A "back" button (top-left) that returns to the cup-select screen.
