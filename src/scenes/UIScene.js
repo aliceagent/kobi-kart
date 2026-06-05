@@ -24,6 +24,8 @@ export default class UIScene extends Phaser.Scene {
     this.speedGfx = this.add.graphics().setDepth(8); // boost speed-lines (behind HUD)
     this.lastLeadLap = 0;
     this.announcedFinalLap = false;
+    this.miniTrackGfx = this.add.graphics().setDepth(9); // minimap track (static)
+    this.miniDotGfx = this.add.graphics().setDepth(9); // minimap kart dots (per frame)
     this.gfx = this.add.graphics().setDepth(10);
 
     this.banner = this.add.text(W / 2, 14, '', {
@@ -76,7 +78,64 @@ export default class UIScene extends Phaser.Scene {
     // Neon: a dark vignette closing in around the action (reduced visibility).
     if (this.race && this.race.lowVis) this.addVignette();
 
+    this.buildMinimap();
+
     addMuteButton(this);
+  }
+
+  // Build the static minimap panel + track outline, fitting the track's bounding
+  // box into a small box in the bottom-left corner.
+  buildMinimap() {
+    const race = this.race;
+    this.minimap = null;
+    if (!race || !race.centerline || !race.centerline.length) return;
+    const cl = race.centerline;
+    const H = this.scale.height;
+    const mw = 150; const mh = 108; const pad = 10;
+    const mx = 14; const my = H - mh - 14;
+    let minX = Infinity; let minY = Infinity; let maxX = -Infinity; let maxY = -Infinity;
+    for (const p of cl) {
+      if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+    }
+    const bw = (maxX - minX) || 1; const bh = (maxY - minY) || 1;
+    const scale = Math.min((mw - 2 * pad) / bw, (mh - 2 * pad) / bh);
+    const offX = mx + (mw - bw * scale) / 2 - minX * scale;
+    const offY = my + (mh - bh * scale) / 2 - minY * scale;
+    this.minimap = { mx, my, mw, mh, scale, offX, offY };
+
+    const g = this.miniTrackGfx;
+    g.clear();
+    g.fillStyle(0x000000, 0.45); g.fillRoundedRect(mx, my, mw, mh, 8);
+    g.lineStyle(2, 0xffffff, 0.5); g.strokeRoundedRect(mx, my, mw, mh, 8);
+    const step = Math.max(1, Math.floor(cl.length / 130));
+    const pts = [];
+    for (let i = 0; i < cl.length; i += step) pts.push({ x: offX + cl[i].x * scale, y: offY + cl[i].y * scale });
+    const loop = (wdt, col, al) => {
+      g.lineStyle(wdt, col, al);
+      g.beginPath(); g.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i += 1) g.lineTo(pts[i].x, pts[i].y);
+      g.closePath(); g.strokePath();
+    };
+    loop(4.5, 0x000000, 0.55);
+    loop(2.4, 0xdfe6f2, 0.9);
+    g.fillStyle(0xffe14d, 1); g.fillCircle(offX + cl[0].x * scale, offY + cl[0].y * scale, 3); // start line
+  }
+
+  drawMinimapDots() {
+    const m = this.minimap;
+    if (!m) return;
+    const g = this.miniDotGfx;
+    g.clear();
+    for (const r of this.race.racers) {
+      const x = Phaser.Math.Clamp(m.offX + r.x * m.scale, m.mx + 3, m.mx + m.mw - 3);
+      const y = Phaser.Math.Clamp(m.offY + r.y * m.scale, m.my + 3, m.my + m.mh - 3);
+      const human = !r.isAI;
+      const rad = human ? 4.5 : 3.5;
+      g.fillStyle(0x000000, 0.6); g.fillCircle(x, y, rad + 1.5);
+      g.fillStyle(r.color, r.finished ? 0.45 : 1); g.fillCircle(x, y, rad);
+      if (human) { g.lineStyle(1.5, 0xffffff, 0.95); g.strokeCircle(x, y, rad); }
+    }
   }
 
   addVignette() {
@@ -192,6 +251,7 @@ export default class UIScene extends Phaser.Scene {
     this.pauseTitle.setVisible(paused);
     this.pauseHint.setVisible(paused);
     this.gfx.clear();
+    this.drawMinimapDots();
     const W = this.scale.width;
 
     const lead = race.humans[0] || race.order[0];
