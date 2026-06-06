@@ -414,6 +414,42 @@ function fallbackTrack(width, height, halfWidth, roadWidth, twist) {
   };
 }
 
+// Find one dirt "shortcut": a chord that cuts the inside of a curve, shorter
+// than following the road around it. Constrained to sit away from the start
+// line AND the lap-midpoint checkpoint so it can never break lap detection.
+function findShortcut(cl, halfWidth) {
+  const n = cl.length;
+  const lo = Math.round(n * 0.1);
+  const midA = Math.round(n * 0.38);
+  const midB = Math.round(n * 0.62);
+  const hi = Math.round(n * 0.9);
+  const segLen = (i) => Math.hypot(cl[(i + 1) % n].x - cl[i].x, cl[(i + 1) % n].y - cl[i].y);
+  let best = null;
+  let bestRatio = 0.62; // only qualify if the chord is < 62% of the arc
+  for (let a = lo; a < hi; a += 2) {
+    for (let skip = 16; skip <= 28; skip += 2) {
+      const b = a + skip;
+      if (b > hi) continue;
+      if (a < midB && b > midA) continue; // must not straddle the checkpoint window
+      const A = cl[a]; const B = cl[b];
+      const chord = Math.hypot(B.x - A.x, B.y - A.y);
+      let arc = 0; for (let i = a; i < b; i += 1) arc += segLen(i);
+      if (arc <= 0) continue;
+      const ratio = chord / arc;
+      if (ratio >= bestRatio) continue;
+      const mx = (A.x + B.x) / 2; const my = (A.y + B.y) / 2;
+      if (minDistToCenterlineSq(cl, mx, my) < (halfWidth * 1.6) ** 2) continue;
+      const q1 = { x: A.x * 0.75 + B.x * 0.25, y: A.y * 0.75 + B.y * 0.25 };
+      const q3 = { x: A.x * 0.25 + B.x * 0.75, y: A.y * 0.25 + B.y * 0.75 };
+      if (minDistToCenterlineSq(cl, q1.x, q1.y) < (halfWidth * 1.15) ** 2) continue;
+      if (minDistToCenterlineSq(cl, q3.x, q3.y) < (halfWidth * 1.15) ** 2) continue;
+      best = { aIdx: a, bIdx: b, ax: A.x, ay: A.y, bx: B.x, by: B.y };
+      bestRatio = ratio;
+    }
+  }
+  return best;
+}
+
 export function generateTrack(width, height, themeName) {
   const theme = themeName
     ? THEMES.find((t) => t.name === themeName) || THEMES[0]
@@ -426,5 +462,7 @@ export function generateTrack(width, height, themeName) {
     base = tryGenerate(width, height, halfWidth, roadWidth, twist);
   }
   if (!base) base = fallbackTrack(width, height, halfWidth, roadWidth, twist);
-  return { ...base, theme };
+  // Dirt shortcut — not on fatal-void worlds (you'd cut across the abyss).
+  const shortcut = theme.offRoad === 'fatal' ? null : findShortcut(base.centerline, halfWidth);
+  return { ...base, theme, shortcut };
 }

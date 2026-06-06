@@ -142,6 +142,21 @@ export function makeGameTextures(scene) {
     g.destroy();
   }
 
+  // Coin: a shiny gold disc with a rim, a star, and a highlight.
+  if (!scene.textures.exists('coin')) {
+    const s = 22;
+    const c = s / 2;
+    const g = scene.make.graphics({ x: 0, y: 0, add: false });
+    g.fillStyle(0x9a6b12, 1); g.fillCircle(c, c, c);
+    g.fillStyle(0xffd23f, 1); g.fillCircle(c, c, c - 2);
+    g.fillStyle(0xfff0a0, 1); g.fillCircle(c, c, c - 5);
+    g.fillStyle(0xe8a81e, 1);
+    g.fillPoints(starPoints(c, c, c - 5, (c - 5) * 0.45, 5, -Math.PI / 2), true);
+    g.fillStyle(0xffffff, 0.8); g.fillCircle(c - 3, c - 3, 1.8);
+    g.generateTexture('coin', s, s);
+    g.destroy();
+  }
+
   // Tumbleweed: a tangled ball of dry twigs (Desert moving obstacle).
   if (!scene.textures.exists('tumbleweed')) {
     const s = 30;

@@ -132,6 +132,7 @@ export function sfx(name) {
     case 'bump': blip(120, 0, 0.06, 'square', 0.08); break;
     case 'lap': blip(784, 0, 0.1, 'square', 0.14); blip(1047, 0.1, 0.18, 'square', 0.14); break;
     case 'finallap': [659, 880, 1047, 1319].forEach((f, i) => blip(f, i * 0.1, 0.3, 'square', 0.2)); break;
+    case 'coin': blip(988, 0, 0.06, 'square', 0.12); blip(1319, 0.05, 0.12, 'square', 0.12); break;
     case 'zap': [1320, 990, 660, 440, 1100].forEach((f, i) => blip(f, i * 0.04, 0.16, 'sawtooth', 0.18)); break;
     case 'finish': [523, 659, 784, 1047].forEach((f, i) => blip(f, i * 0.12, 0.25, 'square', 0.18)); break;
     case 'fanfare': [523, 523, 784, 1047, 1318].forEach((f, i) => blip(f, i * 0.16, 0.4, 'square', 0.2)); break;
@@ -447,8 +448,14 @@ const TRACKS = {
 // --- sequencer --------------------------------------------------------------
 let schedTimer = null;
 let voices = [];
+let tempoMul = 1; // >1 speeds the music up (final-lap intensity)
 const LOOKAHEAD = 0.12;
 const TICK = 25;
+
+// Ramp the music tempo (1 = normal). Takes effect within ~one lookahead.
+export function setMusicRate(mult) {
+  tempoMul = mult > 0 ? mult : 1;
+}
 
 function scheduleTick() {
   const c = ctx;
@@ -457,7 +464,7 @@ function scheduleTick() {
   for (const v of voices) {
     while (v.nextTime < horizon) {
       const [note, beats] = v.seq[v.idx];
-      const dur = beats * v.spb;
+      const dur = (beats * v.spb) / tempoMul;
       if (note) {
         if (v.drum) drumAt(note, v.nextTime, v.gain);
         else toneAt(noteFreq(note), v.nextTime, dur * v.staccato, v.type, v.gain);
@@ -475,6 +482,7 @@ export function startMusic(themeName) {
   if (!c) return;
   const track = TRACKS[themeName] || TRACKS.Grassy;
   const spb = 60 / track.bpm;
+  tempoMul = 1; // reset any final-lap speed-up from the previous race
   const t0 = c.currentTime + 0.15;
   voices = [];
   voices.push({ seq: track.melody, idx: 0, nextTime: t0, spb, type: track.wave, staccato: track.staccato, gain: 0.085 });

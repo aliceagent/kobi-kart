@@ -43,6 +43,11 @@ export default class ResultsScene extends Phaser.Scene {
       fontFamily: 'monospace', fontSize: '15px', color: '#8be8f0',
     }).setOrigin(0.5).setDepth(5);
 
+    // Fastest lap of the race (across everyone who completed one).
+    const lapVals = results.map((r) => r.bestLap).filter((v) => v != null);
+    const fastest = lapVals.length ? Math.min(...lapVals) : null;
+    const fmtLap = (s) => (s == null ? '—' : `${s.toFixed(2)}s`);
+
     // Finish-order rows.
     const rowH = 64;
     const top = 120;
@@ -75,6 +80,16 @@ export default class ResultsScene extends Phaser.Scene {
       container.add(this.add.text(mx + 110, 0, `${ORD[i]}   ${r.name}`, {
         fontFamily: 'monospace', fontSize: '22px', fontStyle: 'bold',
         color: Phaser.Display.Color.IntegerToColor(r.color).rgba,
+      }).setOrigin(0, 0.5));
+
+      // Best-lap readout (gold + a ⚡ for the race's fastest lap).
+      const isFastest = fastest != null && r.bestLap === fastest;
+      const lapX = 36;
+      container.add(this.add.text(lapX, -12, isFastest ? '⚡ FASTEST LAP' : 'BEST LAP', {
+        fontFamily: 'monospace', fontSize: '11px', color: isFastest ? '#ffe14d' : '#9aa0b4', fontStyle: 'bold',
+      }).setOrigin(0, 0.5));
+      container.add(this.add.text(lapX, 9, fmtLap(r.bestLap), {
+        fontFamily: 'monospace', fontSize: '18px', color: isFastest ? '#ffe14d' : '#ffffff', fontStyle: 'bold',
       }).setOrigin(0, 0.5));
 
       // Points badge.

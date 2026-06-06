@@ -62,6 +62,13 @@ export default class UIScene extends Phaser.Scene {
       this.add.text(W - 16, 99, 'item: R-Shift \\ /', hintStyle).setOrigin(1, 0).setDepth(11);
     }
 
+    const coinStyle = {
+      fontFamily: 'monospace', fontSize: '15px', color: '#ffe14d', fontStyle: 'bold',
+      stroke: '#000000', strokeThickness: 4,
+    };
+    this.coinP1 = this.add.text(34, 116, '', coinStyle).setOrigin(0, 0.5).setDepth(11);
+    this.coinP2 = this.add.text(W - 34, 116, '', coinStyle).setOrigin(1, 0.5).setDepth(11);
+
     this.stragglerText = this.add.text(W / 2, 40, '', {
       fontFamily: 'monospace', fontSize: '15px', color: '#ffe14d', fontStyle: 'bold',
       stroke: '#000000', strokeThickness: 4,
@@ -124,6 +131,14 @@ export default class UIScene extends Phaser.Scene {
     };
     loop(4.5, 0x000000, 0.55);
     loop(2.4, 0xdfe6f2, 0.9);
+    const sc = race.shortcut;
+    if (sc) {
+      g.lineStyle(2.4, 0x9c7b50, 0.95);
+      g.beginPath();
+      g.moveTo(offX + sc.ax * scale, offY + sc.ay * scale);
+      g.lineTo(offX + sc.bx * scale, offY + sc.by * scale);
+      g.strokePath();
+    }
     g.fillStyle(0xffe14d, 1); g.fillCircle(offX + cl[0].x * scale, offY + cl[0].y * scale, 3); // start line
   }
 
@@ -175,6 +190,13 @@ export default class UIScene extends Phaser.Scene {
     this.gfx.fillRoundedRect(bx, y, Math.max(0, w * pct), h, 3);
     this.gfx.lineStyle(2, 0xffffff, 0.85);
     this.gfx.strokeRoundedRect(bx, y, w, h, 3);
+  }
+
+  drawCoinTag(x, y, count) {
+    const g = this.gfx;
+    g.fillStyle(0x9a6b12, 1); g.fillCircle(x, y, 8);
+    g.fillStyle(count > 0 ? 0xffd23f : 0x6a6a52, 1); g.fillCircle(x, y, 6.5);
+    g.fillStyle(0xfff0a0, count > 0 ? 1 : 0.5); g.fillCircle(x, y, 3.5);
   }
 
   drawItemBox(x, y, size, item, accent, count) {
@@ -280,12 +302,14 @@ export default class UIScene extends Phaser.Scene {
       this.p1Text.setText(`P1  ${ordinal(h0.livePlace || 1)}${h0.finished ? '  done' : ''}`);
       this.drawBar(16, 34, h0, h0.color, false);
       this.drawItemBox(16, 54, 42, h0.heldItem, h0.color, h0.heldCount || h0.orbitShells || 0);
+      this.drawCoinTag(22, 116, h0.coins || 0); this.coinP1.setText(`× ${h0.coins || 0}`);
     }
     const h1 = race.humans[1];
     if (h1) {
       this.p2Text.setText(`${ordinal(h1.livePlace || 1)}  P2${h1.finished ? '  done' : ''}`);
       this.drawBar(W - 16, 34, h1, h1.color, true);
       this.drawItemBox(W - 16 - 42, 54, 42, h1.heldItem, h1.color, h1.heldCount || h1.orbitShells || 0);
+      this.drawCoinTag(W - 22, 116, h1.coins || 0); this.coinP2.setText(`× ${h1.coins || 0}`);
     }
 
     // Boost speed-lines: intensity from the fastest human's boost state.
@@ -328,6 +352,7 @@ export default class UIScene extends Phaser.Scene {
 
   showFinalLap() {
     Audio.sfx('finallap');
+    Audio.setMusicRate(1.2); // ramp the music for last-lap tension
     const W = this.scale.width;
     const H = this.scale.height;
     this.race.cameras.main.flash(180, 255, 230, 120);

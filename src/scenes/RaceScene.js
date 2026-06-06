@@ -61,6 +61,9 @@ export default class RaceScene extends Phaser.Scene {
     this.lowVis = !!this.theme.lowVis; // Neon: tighter camera + vignette
     // Worlds with a fatal void (Rainbow, Volcano) have no guard rails — you fall.
     this.rails = this.fatalOffRoad ? [] : track.rails;
+    // Dirt shortcut (may be null): cuts a curve, a bit slower but shorter.
+    this.shortcut = track.shortcut || null;
+    this.shortcutHalf = (this.roadWidth * 0.72) / 2;
 
     // Per-world road features / hazards (filled by drawTrack + createHazards).
     this.boostPads = [];
@@ -83,6 +86,7 @@ export default class RaceScene extends Phaser.Scene {
     this.trackGfx = this.drawTrack();
     this.createRacers();
     this.createItemBoxes();
+    this.createCoins();
     this.createHazards();
     this.createMovers();
     this.createFog();
@@ -276,7 +280,14 @@ export default class RaceScene extends Phaser.Scene {
   }
 
   isOnRoad(x, y) {
-    return this.minDistSqToCenterline(x, y) <= this.halfWidth * this.halfWidth;
+    return this.minDistSqToCenterline(x, y) <= this.halfWidth * this.halfWidth || this.onShortcut(x, y);
+  }
+
+  // On the dirt shortcut strip? (counts as "road" so it isn't off-road-slow).
+  onShortcut(x, y) {
+    const s = this.shortcut;
+    if (!s) return false;
+    return distToSegSq(x, y, s.ax, s.ay, s.bx, s.by) <= this.shortcutHalf * this.shortcutHalf;
   }
 
   // ---------------------------------------------------------- progress -------
@@ -326,6 +337,9 @@ export default class RaceScene extends Phaser.Scene {
     if (ni > n * 0.4 && ni < n * 0.6) kart.halfway = true;
     if (wrapped && kart.halfway) {
       kart.halfway = false;
+      const lapTime = this.raceElapsed - kart.lapStart;
+      kart.lapStart = this.raceElapsed;
+      if (lapTime > 0 && (kart.bestLap == null || lapTime < kart.bestLap)) kart.bestLap = lapTime;
       kart.lap += 1;
       if (kart.lap >= LAPS) {
         this.finishRacer(kart);
@@ -359,6 +373,7 @@ export default class RaceScene extends Phaser.Scene {
     const order = this.racers.slice().sort((a, b) => a.place - b.place);
     const results = order.map((k, i) => ({
       id: k.id, name: k.name, color: k.color, place: k.place, points: POINTS[i] || 0,
+      bestLap: k.bestLap, coins: k.coins,
     }));
     results.forEach((r) => { this.gp.points[r.id] += r.points; });
     this.gp.lastResults = results;
@@ -631,6 +646,92 @@ export default class RaceScene extends Phaser.Scene {
     this.particles.emitParticleAt(x, y, 10);
   }
 
+  // -------------------------------------------------------------- coins ------
+  createCoins() {
+    const n = this.centerline.length;
+    this.coins = [];
+    const count = 26;
+    const gap = Math.max(10, Math.round(n * 0.05));
+    const span = n - 2 * gap;
+    for (let i = 0; i < count; i += 1) {
+      const idx = Math.round(gap + ((i + 0.5) * span) / count) % n;
+      const p = this.centerline[idx];
+      const pn = this.centerline[(idx + 1) % n];
+      let tx = pn.x - p.x; let ty = pn.y - p.y;
+      const tl = Math.hypot(tx, ty) || 1; tx /= tl; ty /= tl;
+      const nx = -ty; const ny = tx;
+      const off = ((i % 3) - 1) * this.halfWidth * 0.42; // weave -1 / 0 / 1
+      const sprite = this.add.image(p.x + nx * off, p.y + ny * off, 'coin').setDepth(7);
+      this.coins.push({ x: sprite.x, y: sprite.y, sprite, active: true, timer: 0 });
+    }
+  }
+
+  updateCoins(dt) {
+    for (const c of this.coins) {
+      if (c.active) {
+        c.sprite.rotation += dt * 4;
+        c.sprite.setScale(1 + Math.sin(this.elapsed * 5 + c.x) * 0.12);
+        for (const r of this.racers) {
+          if (r.finished || r.falling || r.spunOut) continue;
+          if ((r.x - c.x) ** 2 + (r.y - c.y) ** 2 < (r.radius + 12) ** 2) {
+            this.giveCoin(r);
+            c.active = false; c.timer = 6; c.sprite.setVisible(false);
+            break;
+          }
+        }
+      } else {
+        c.timer -= dt;
+        if (c.timer <= 0) { c.active = true; c.sprite.setVisible(true); c.sprite.setScale(1); }
+      }
+    }
+  }
+
+  giveCoin(kart) {
+    kart.coins = Math.min(10, kart.coins + 1);
+    kart.coinMul = 1 + 0.012 * kart.coins;
+    if (!kart.isAI) Audio.sfx('coin');
+    this.burst(kart.x, kart.y, 0xffe14d);
+  }
+
+  // Spinning out scatters a couple of coins (risk of carrying a big stack).
+  coinDropCheck(kart) {
+    const spun = kart.spinTimer > 0;
+    if (spun && !kart._coinPrevSpun && kart.coins > 0) {
+      kart.coins = Math.max(0, kart.coins - 2);
+      kart.coinMul = 1 + 0.012 * kart.coins;
+      this.burst(kart.x, kart.y, 0xffd23f);
+    }
+    kart._coinPrevSpun = spun;
+  }
+
+  // ---------------------------------------------------------- slipstream -----
+  // Tucking into another kart's wake (close, directly behind, aligned) builds a
+  // draft that raises your top speed up to +12% — a skill-based catch-up.
+  updateDraft(dt) {
+    const DIST = 80;
+    const CONE = 0.5;
+    for (const f of this.racers) {
+      let drafting = false;
+      if (!f.finished && !f.falling && !f.spunOut) {
+        for (const l of this.racers) {
+          if (l === f || l.finished) continue;
+          const dx = f.x - l.x; const dy = f.y - l.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist < 2 * f.radius || dist > DIST) continue;
+          const lfx = Math.cos(l.heading); const lfy = Math.sin(l.heading);
+          if (dx * lfx + dy * lfy > 0) continue;          // f must be BEHIND l
+          if (Math.abs(dx * lfy - dy * lfx) / dist > CONE) continue; // within the wake cone
+          drafting = true; break;
+        }
+      }
+      f.drafting = drafting;
+      f.draftTimer = drafting
+        ? Math.min(1.5, f.draftTimer + dt)
+        : Math.max(0, f.draftTimer - dt * 1.5);
+      f.draftMul = 1 + Math.min(0.12, f.draftTimer * 0.1);
+    }
+  }
+
   // A festive confetti + popup when a racer crosses the line (lap or finish).
   celebrateCrossing(kart, finished) {
     this.confetti.emitParticleAt(kart.x, kart.y, finished ? 48 : 26);
@@ -879,6 +980,9 @@ export default class RaceScene extends Phaser.Scene {
     this.racers.forEach((r) => this.rescueIfStuck(r, dt));
     this.racers.forEach((r) => this.updateProgress(r));
     this.updateItemBoxes(dt);
+    this.updateCoins(dt);
+    this.updateDraft(dt);
+    this.racers.forEach((r) => this.coinDropCheck(r));
     this.updateProjectiles(dt);
     this.updateTraps(dt);
 
@@ -1123,6 +1227,12 @@ export default class RaceScene extends Phaser.Scene {
         if ((kart.x - s.x) ** 2 + (kart.y - s.y) ** 2 < s.r * s.r) { terrain.capMul = 0.5; break; }
       }
     }
+    // Dirt shortcut: counts as road but a bit slower + looser than tarmac.
+    if (this.shortcut && this.minDistSqToCenterline(kart.x, kart.y) > this.halfWidth * this.halfWidth
+        && this.onShortcut(kart.x, kart.y)) {
+      terrain.capMul *= 0.82;
+      terrain.grip = Math.min(terrain.grip, 0.9);
+    }
     return terrain;
   }
 
@@ -1251,6 +1361,19 @@ export default class RaceScene extends Phaser.Scene {
       const nx = -Math.sin(r.heading);
       const ny = Math.cos(r.heading);
 
+      // Slipstream: faint wind streaks flanking a kart that's charging a draft.
+      if (r.drafting && r.draftTimer > 0.35 && !r.falling) {
+        const a = 0.25 + 0.45 * Math.min(1, r.draftTimer);
+        g.lineStyle(2, 0xeafcff, a);
+        for (const side of [-1, 1]) {
+          const ox = r.x + nx * side * 11; const oy = r.y + ny * side * 11;
+          g.beginPath();
+          g.moveTo(ox - Math.cos(r.heading) * 6, oy - Math.sin(r.heading) * 6);
+          g.lineTo(ox + Math.cos(r.heading) * 16, oy + Math.sin(r.heading) * 16);
+          g.strokePath();
+        }
+      }
+
       // Boost flames + a speed-stretch on the kart whenever it's boosting.
       const boosting = r.itemBoostTimer > 0 || r.padBoostTimer > 0 || r.boosting;
       if (!r.falling) {
@@ -1325,6 +1448,7 @@ export default class RaceScene extends Phaser.Scene {
 
     this.drawThickLoop(g, this.centerline, this.roadWidth + 12, t.edge);
     this.drawThickLoop(g, this.centerline, this.roadWidth, t.road);
+    this.drawShortcut(g);
     this.placeRoadFeatures(g);
     this.drawStartLine(g);
     this.drawRails(g);
@@ -1380,6 +1504,28 @@ export default class RaceScene extends Phaser.Scene {
     g.fillStyle(color, 1);
     const r = width / 2;
     for (let i = 0; i < pts.length; i += 1) g.fillCircle(pts[i].x, pts[i].y, r);
+  }
+
+  // The dirt shortcut: a packed-earth strip across the inside of a curve, with
+  // direction chevrons so it reads as a faster (if rougher) line.
+  drawShortcut(g) {
+    const s = this.shortcut;
+    if (!s) return;
+    const w = this.shortcutHalf * 2;
+    let tx = s.bx - s.ax; let ty = s.by - s.ay;
+    const tl = Math.hypot(tx, ty) || 1; tx /= tl; ty /= tl;
+    const nx = -ty; const ny = tx;
+    g.lineStyle(w + 8, 0x000000, 0.22);
+    g.beginPath(); g.moveTo(s.ax, s.ay); g.lineTo(s.bx, s.by); g.strokePath();
+    g.lineStyle(w, 0x9c7b50, 1);
+    g.beginPath(); g.moveTo(s.ax, s.ay); g.lineTo(s.bx, s.by); g.strokePath();
+    g.fillStyle(0x9c7b50, 1); g.fillCircle(s.ax, s.ay, w / 2); g.fillCircle(s.bx, s.by, w / 2);
+    g.fillStyle(0x7a5d38, 0.6);
+    for (let f = 0.18; f < 0.85; f += 0.22) {
+      const cx = s.ax + (s.bx - s.ax) * f; const cy = s.ay + (s.by - s.ay) * f;
+      g.fillTriangle(cx - nx * 10 - tx * 7, cy - ny * 10 - ty * 7,
+        cx + nx * 10 - tx * 7, cy + ny * 10 - ty * 7, cx + tx * 11, cy + ty * 11);
+    }
   }
 
   drawRails(g) {

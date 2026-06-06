@@ -114,6 +114,13 @@ export default class Kart {
     this.aiSkill = 1;
     this.speedMul = 1; // rubber-banding for AI
     this.speedScale = 1; // global car-speed setting (slow/medium/fast)
+    this.coins = 0; // collected coins → small top-speed bonus
+    this.coinMul = 1; // 1 + 0.012*coins
+    this.draftMul = 1; // slipstream top-speed bonus
+    this.draftTimer = 0; // how long we've been in another kart's wake
+    this.drafting = false;
+    this.lapStart = 0; // raceElapsed at the start of the current lap
+    this.bestLap = null; // fastest completed lap (seconds)
   }
 
   get x() { return this.sprite.x; }
@@ -246,7 +253,7 @@ export default class Kart {
     } else {
       cap = onRoad ? TUNE.maxSpeed : offMax;
     }
-    cap *= this.speedMul * this.speedScale * (terrain.capMul || 1);
+    cap *= this.speedMul * this.speedScale * (terrain.capMul || 1) * this.coinMul * this.draftMul;
     if (this.bogTimer > 0) cap = Math.min(cap, 120 * this.speedScale); // bogged: crawl off the line
 
     if (this.drifting) {
