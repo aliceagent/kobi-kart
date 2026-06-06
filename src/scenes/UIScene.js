@@ -38,6 +38,11 @@ export default class UIScene extends Phaser.Scene {
       stroke: '#000000', strokeThickness: 9,
     }).setOrigin(0.5).setDepth(12);
 
+    this.revHint = this.add.text(W / 2, this.scale.height / 2 + 34, '', {
+      fontFamily: 'monospace', fontSize: '15px', color: '#ffe14d', fontStyle: 'bold',
+      stroke: '#000000', strokeThickness: 4,
+    }).setOrigin(0.5).setDepth(12);
+
     const style = {
       fontFamily: 'monospace', fontSize: '16px', color: '#ffffff',
       stroke: '#000000', strokeThickness: 4,
@@ -260,6 +265,7 @@ export default class UIScene extends Phaser.Scene {
     const total = race.gp.themeOrder.length;
     this.banner.setText(`RACE ${race.gp.raceIndex + 1}/${total}   ·   ${themeName}   ·   LAP ${lap}/${LAPS}`);
     this.countdownLabel.setText(race.countdownText || '');
+    this.revHint.setText(race.state === 'countdown' ? 'tap BOOST as GO! flashes for a 🚀 rocket start' : '');
 
     // When only the last racer remains, show their 60s finish clock.
     if (race.stragglerDeadline !== null && race.state === 'racing') {

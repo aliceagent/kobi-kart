@@ -88,6 +88,7 @@ export default class Kart {
     this.padBoostTimer = 0; // brief boost from a speed strip / boost pad
     this.oilImmune = 0; // grace after an oil-slick spin so it can't trap you
     this.bounceCd = 0; // cooldown so a bounce pad fires once per touch
+    this.bogTimer = 0; // bogged engine after a botched (too-early) rocket start
     this.starTimer = 0; // invincibility star: immune + faster + plows others
     this.heldItem = null;
     this.heldCount = 0; // ammo for triple-mushroom
@@ -159,6 +160,7 @@ export default class Kart {
     if (this.padBoostTimer > 0) this.padBoostTimer -= dt;
     if (this.starTimer > 0) this.starTimer -= dt;
     if (this.bounceCd > 0) this.bounceCd -= dt;
+    if (this.bogTimer > 0) this.bogTimer -= dt;
     if (this.oilImmune > 0) this.oilImmune -= dt;
     if (this.shieldTimer > 0) this.shieldTimer -= dt;
 
@@ -245,6 +247,7 @@ export default class Kart {
       cap = onRoad ? TUNE.maxSpeed : offMax;
     }
     cap *= this.speedMul * this.speedScale * (terrain.capMul || 1);
+    if (this.bogTimer > 0) cap = Math.min(cap, 120 * this.speedScale); // bogged: crawl off the line
 
     if (this.drifting) {
       // Keep momentum through the corner (no brake decel) with a small scrub,

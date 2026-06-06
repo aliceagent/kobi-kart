@@ -747,6 +747,69 @@ export default class RaceScene extends Phaser.Scene {
     cam.centerOn(this.camCenter.x, this.camCenter.y);
   }
 
+  // ------------------------------------------------------- rocket start ------
+  // True while this human holds boost (P1: W; P2: ↑; solo merges both sets).
+  humanBoostHeld(kart) {
+    if (kart === this.humans[0]) {
+      if (this.keysP1.boost.isDown) return true;
+      return this.soloDualInput && this.keysP2.boost.isDown;
+    }
+    return this.keysP2.boost.isDown;
+  }
+
+  // During the countdown, remember when each human first started revving, and
+  // puff a little exhaust so they can see they're charging.
+  updateRev(dt) {
+    for (const h of this.humans) {
+      if (this.humanBoostHeld(h)) {
+        if (h.revStartCd == null) h.revStartCd = this.countdown;
+        if (Math.random() < 0.35) {
+          this.burst(h.x - Math.cos(h.heading) * 16, h.y - Math.sin(h.heading) * 16, 0xffd23f);
+        }
+      } else {
+        h.revStartCd = null;
+      }
+    }
+  }
+
+  // At GO: a well-timed rev (started in the last ~0.55s) launches; revving too
+  // early bogs you down. AI rolls a rocket by difficulty so it stays competitive.
+  launchStart() {
+    const ROCKET_WINDOW = 0.55;
+    const aiChance = { easy: 0.2, medium: 0.55, hard: 0.85 }[this.gp.difficulty] || 0.55;
+    for (const r of this.racers) {
+      if (r.isAI) {
+        if (Math.random() < aiChance) this.applyRocket(r, false);
+      } else if (r.revStartCd != null) {
+        if (r.revStartCd <= ROCKET_WINDOW) this.applyRocket(r, true);
+        else this.applyBog(r);
+      }
+    }
+  }
+
+  applyRocket(kart, human) {
+    kart.itemBoostTimer = Math.max(kart.itemBoostTimer, 1.0);
+    this.burst(kart.x, kart.y, 0xffd23f);
+    if (human) { Audio.sfx('boost'); this.rocketPopup(kart); }
+  }
+
+  applyBog(kart) {
+    kart.bogTimer = 1.1;
+    this.burst(kart.x, kart.y, 0x222226);
+    Audio.sfx('bump');
+  }
+
+  rocketPopup(kart) {
+    const t = this.add.text(kart.x, kart.y - 30, 'ROCKET START!', {
+      fontFamily: 'monospace', fontSize: '30px', color: '#ffe14d', fontStyle: 'bold',
+      stroke: '#c0392b', strokeThickness: 6,
+    }).setOrigin(0.5).setDepth(40);
+    this.tweens.add({
+      targets: t, y: t.y - 70, alpha: { from: 1, to: 0 }, scale: { from: 0.5, to: 1.3 },
+      duration: 1100, ease: 'Cubic.Out', onComplete: () => t.destroy(),
+    });
+  }
+
   applyRubberBand() {
     // Lead = furthest progressed racer. The AI's base pace comes from the
     // chosen difficulty; trailing AI catch up by the difficulty's band amount.
@@ -774,10 +837,12 @@ export default class RaceScene extends Phaser.Scene {
         this.countdownText = label;
         Audio.sfx(label === 'GO!' ? 'go' : 'beep');
       }
+      this.updateRev(dt);
       if (this.countdown <= 0) {
         this.state = 'racing';
         this.countdownText = '';
         this.racers.forEach((r) => { r.frozen = false; });
+        this.launchStart();
       }
       this.updateCamera(dt);
       return;
