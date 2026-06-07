@@ -131,6 +131,12 @@ export default class TitleScene extends Phaser.Scene {
     this.demoT = (this.demoT || 0) + dt;
     this.updateDemo(dt);
 
+    if (this.clouds) {
+      const W = this.scale.width;
+      for (const c of this.clouds) { c.x += 5 * dt; if (c.x > W + 70) c.x = -70; }
+      this.drawClouds();
+    }
+
     if (!this.psychedelic || !this.psyGfx) return;
     this.psyPhase += dt;
     const W = this.scale.width;
@@ -154,54 +160,139 @@ export default class TitleScene extends Phaser.Scene {
   }
 
   drawScenery(W, H) {
-    const horizon = H * 0.6;
+    const horizon = H * 0.46;
+    const roadTop = H * 0.66;
+    const roadBot = H - 56;
     const g = this.add.graphics().setDepth(0);
-    g.fillStyle(0x6fc3f0, 1); g.fillRect(0, 0, W, horizon * 0.5);
-    g.fillStyle(0x8fd2f3, 1); g.fillRect(0, horizon * 0.5, W, horizon * 0.5);
-    g.fillStyle(0x7ec850, 1); g.fillRect(0, horizon, W, H - horizon);
 
-    const sx = W - 110;
-    const sy = 96;
+    // Sky gradient.
+    const skyTop = Phaser.Display.Color.ValueToColor(0x49a8ec);
+    const skyBot = Phaser.Display.Color.ValueToColor(0xc7ecff);
+    const bands = 18;
+    for (let i = 0; i < bands; i += 1) {
+      const c = Phaser.Display.Color.Interpolate.ColorWithColor(skyTop, skyBot, bands, i);
+      g.fillStyle(Phaser.Display.Color.GetColor(c.r, c.g, c.b), 1);
+      g.fillRect(0, Math.floor((i * horizon) / bands), W, Math.ceil(horizon / bands) + 1);
+    }
+
+    // Sun with glow + rays.
+    const sx = W - 118; const sy = 82;
+    g.fillStyle(0xfff3a0, 0.22); g.fillCircle(sx, sy, 96);
     g.fillStyle(0xffe14d, 0.9);
     for (let k = 0; k < 12; k += 1) {
       const a = (k / 12) * Math.PI * 2;
-      g.fillTriangle(
-        sx + Math.cos(a) * 52, sy + Math.sin(a) * 52,
-        sx + Math.cos(a + 0.12) * 84, sy + Math.sin(a + 0.12) * 84,
-        sx + Math.cos(a - 0.12) * 84, sy + Math.sin(a - 0.12) * 84,
-      );
+      g.fillTriangle(sx + Math.cos(a) * 50, sy + Math.sin(a) * 50,
+        sx + Math.cos(a + 0.1) * 82, sy + Math.sin(a + 0.1) * 82,
+        sx + Math.cos(a - 0.1) * 82, sy + Math.sin(a - 0.1) * 82);
     }
-    g.fillStyle(0xffd23f, 1); g.fillCircle(sx, sy, 50);
-    g.fillStyle(0xffe884, 1); g.fillCircle(sx - 14, sy - 14, 20);
+    g.fillStyle(0xffd23f, 1); g.fillCircle(sx, sy, 48);
+    g.fillStyle(0xffe884, 1); g.fillCircle(sx - 13, sy - 13, 18);
 
-    const cloud = (cx, cy, s) => {
-      g.fillStyle(0xffffff, 0.95);
-      g.fillCircle(cx, cy, 20 * s); g.fillCircle(cx + 24 * s, cy + 4 * s, 16 * s);
-      g.fillCircle(cx - 24 * s, cy + 4 * s, 15 * s); g.fillRect(cx - 36 * s, cy + 2 * s, 72 * s, 16 * s);
-    };
-    cloud(150, 90, 1); cloud(W * 0.42, 60, 0.8); cloud(330, 150, 0.7);
+    // Rolling hills + grass.
+    g.fillStyle(0x68bd54, 1);
+    for (let hx = -40; hx < W + 90; hx += 150) g.fillCircle(hx, horizon + 26, 80);
+    g.fillStyle(0x7ec850, 1); g.fillRect(0, horizon, W, H - horizon);
+    g.fillStyle(0x88d35a, 1); g.fillRect(0, horizon, W, 8);
 
-    const tree = (tx, ty, s) => {
-      g.fillStyle(0x7a4a22, 1); g.fillRect(tx - 5 * s, ty, 10 * s, 26 * s);
-      g.fillStyle(0x2f7d36, 1); g.fillCircle(tx, ty, 26 * s); g.fillCircle(tx - 18 * s, ty + 8 * s, 18 * s); g.fillCircle(tx + 18 * s, ty + 8 * s, 18 * s);
-      g.fillStyle(0x57b24d, 1); g.fillCircle(tx - 6 * s, ty - 8 * s, 12 * s);
-    };
-    tree(70, horizon + 18, 1); tree(W - 60, horizon + 26, 1.1);
+    // Grandstand + crowd, roadside trees and tyre stacks.
+    this.drawGrandstand(g, W, roadTop - 8);
+    this.drawTree(g, 56, roadTop - 14, 1.0);
+    this.drawTree(g, W - 54, roadTop - 10, 1.15);
+    this.drawTyreStack(g, 118, roadTop - 13);
+    this.drawTyreStack(g, W - 140, roadTop - 13);
 
-    const roadTop = H * 0.74;
-    const roadBot = H * 0.85;
-    g.fillStyle(0xffffff, 1); g.fillRect(0, roadTop - 5, W, roadBot - roadTop + 10);
+    // ---- Wide racetrack ----
+    const rsH = 11;
+    this.drawRumble(g, roadTop - rsH, W, rsH);
+    this.drawRumble(g, roadBot, W, rsH);
+    g.fillStyle(0xffffff, 1); g.fillRect(0, roadTop - 2, W, 4); g.fillRect(0, roadBot - 2, W, 4);
     g.fillStyle(0x4a4a55, 1); g.fillRect(0, roadTop, W, roadBot - roadTop);
-    const cell = 18;
-    const fx = W * 0.5;
-    for (let row = 0, yy = roadTop; yy < roadBot; yy += cell, row += 1) {
-      for (let c = 0; c < 2; c += 1) {
-        g.fillStyle((row + c) % 2 === 0 ? 0xffffff : 0x111111, 1);
-        g.fillRect(fx + c * cell - cell, yy, cell, cell);
+    g.fillStyle(0xffffff, 0.05); g.fillRect(0, roadTop, W, (roadBot - roadTop) * 0.45);
+    const lane1 = roadTop + (roadBot - roadTop) / 3;
+    const lane2 = roadTop + (2 * (roadBot - roadTop)) / 3;
+    g.fillStyle(0xffe14d, 0.85);
+    for (let xx = 8; xx < W; xx += 66) { g.fillRect(xx, lane1 - 2, 34, 4); g.fillRect(xx + 33, lane2 - 2, 34, 4); }
+    this.drawChecker(g, W * 0.5 - 19, roadTop, 38, roadBot - roadTop, 12);
+
+    // Bunting across the top + drifting clouds (animated in update()).
+    this.drawBunting(g, W);
+    this.cloudGfx = this.add.graphics().setDepth(1);
+    this.clouds = [
+      { x: W * 0.18, y: 70, s: 1 }, { x: W * 0.5, y: 48, s: 0.8 },
+      { x: W * 0.82, y: 104, s: 0.7 }, { x: W * 0.36, y: 128, s: 0.6 },
+    ];
+    this.drawClouds();
+  }
+
+  drawClouds() {
+    const g = this.cloudGfx;
+    if (!g) return;
+    g.clear();
+    for (const c of this.clouds) {
+      const s = c.s;
+      g.fillStyle(0xffffff, 0.95);
+      g.fillCircle(c.x, c.y, 20 * s); g.fillCircle(c.x + 24 * s, c.y + 5 * s, 16 * s);
+      g.fillCircle(c.x - 24 * s, c.y + 5 * s, 15 * s); g.fillRect(c.x - 36 * s, c.y + 3 * s, 72 * s, 15 * s);
+      g.fillStyle(0xdff2ff, 0.85); g.fillRect(c.x - 36 * s, c.y + 14 * s, 72 * s, 4 * s);
+    }
+  }
+
+  drawTree(g, tx, ty, s) {
+    g.fillStyle(0x6b4423, 1); g.fillRect(tx - 5 * s, ty, 10 * s, 28 * s);
+    g.fillStyle(0x2f7d36, 1);
+    g.fillCircle(tx, ty - 2 * s, 26 * s); g.fillCircle(tx - 18 * s, ty + 8 * s, 18 * s); g.fillCircle(tx + 18 * s, ty + 8 * s, 18 * s);
+    g.fillStyle(0x57b24d, 1); g.fillCircle(tx - 7 * s, ty - 10 * s, 12 * s);
+  }
+
+  drawTyreStack(g, x, y) {
+    for (let i = 0; i < 3; i += 1) {
+      const cy = y - i * 11;
+      g.fillStyle(0x1c1c22, 1); g.fillCircle(x, cy, 9);
+      g.fillStyle(0x33333c, 1); g.fillCircle(x, cy, 4.5);
+    }
+  }
+
+  drawRumble(g, y, W, h) {
+    const cell = 26;
+    for (let i = 0, x = 0; x < W; x += cell, i += 1) {
+      g.fillStyle(i % 2 ? 0xffffff : 0xe2403a, 1);
+      g.fillRect(x, y, cell, h);
+    }
+  }
+
+  drawChecker(g, x, y, w, h, cell) {
+    const cols = Math.max(2, Math.round(w / cell));
+    const cw = w / cols;
+    for (let r = 0, yy = y; yy < y + h; yy += cell, r += 1) {
+      for (let c = 0; c < cols; c += 1) {
+        g.fillStyle((r + c) % 2 === 0 ? 0xffffff : 0x111111, 1);
+        g.fillRect(x + c * cw, yy, cw + 0.5, Math.min(cell, y + h - yy) + 0.5);
       }
     }
-    g.fillStyle(0xffe14d, 0.9);
-    for (let xx = 0; xx < W; xx += 60) g.fillRect(xx, (roadTop + roadBot) / 2 - 2, 32, 4);
+  }
+
+  drawGrandstand(g, W, baseY) {
+    const sw = 300; const sh = 56;
+    const sx = W / 2 - sw / 2; const sy = baseY - sh;
+    g.fillStyle(0x3a4a8c, 1); g.fillRect(sx - 12, sy - 12, sw + 24, 14); // roof
+    g.fillStyle(0x6f7794, 1); g.fillRect(sx, sy, sw, sh); // stand
+    const cols = [0xff5d8f, 0x4d8bff, 0xffd23f, 0x57c75a, 0xb06bff, 0xffffff, 0xff8a3c];
+    let seed = 7;
+    const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+    for (let i = 0; i < 130; i += 1) {
+      g.fillStyle(cols[Math.floor(rnd() * cols.length)], 1);
+      g.fillCircle(sx + 6 + rnd() * (sw - 12), sy + 6 + rnd() * (sh - 10), 2.4);
+    }
+  }
+
+  drawBunting(g, W) {
+    const cols = [0xe2403a, 0xffd23f, 0x57c75a, 0x4d8bff, 0xb06bff];
+    const span = 30;
+    g.fillStyle(0x222222, 0.55); g.fillRect(0, 7, W, 2);
+    for (let i = 0, x = 0; x < W; x += span, i += 1) {
+      g.fillStyle(cols[i % cols.length], 0.95);
+      g.fillTriangle(x + 2, 9, x + span - 2, 9, x + span / 2, 24);
+    }
   }
 
   // A self-playing demo RACE in the lower scenery: up to four karts stream
@@ -209,7 +300,9 @@ export default class TitleScene extends Phaser.Scene {
   // shells forward (attack) and popping shields (defense). When a kart exits the
   // right it loops back in on the left as the next colour, so all eight cycle by.
   createDemo(W, H) {
-    this.demoBand = { top: H * 0.67, bottom: H - 60, left: -60, right: W + 40 };
+    // Keep the racers inside the asphalt (matches the road drawn in drawScenery).
+    const roadTop = H * 0.66; const roadBot = H - 56;
+    this.demoBand = { top: roadTop + 24, bottom: roadBot - 24, left: -60, right: W + 40 };
     this.demoKarts = [];
     this.demoShells = [];
     this.demoSparks = [];
