@@ -1,7 +1,9 @@
 import Phaser from 'phaser';
-import { ROSTER } from '../GrandPrix.js';
+import { ROSTER, initGrandPrix, CUPS } from '../GrandPrix.js';
 import * as Audio from '../Audio.js';
 import { addMuteButton } from '../ui.js';
+
+const ATTRACT_DELAY = 12; // seconds idle on the title before the demo race kicks in
 
 const KONAMI = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'KeyB', 'KeyA'];
 
@@ -84,6 +86,15 @@ export default class TitleScene extends Phaser.Scene {
     this.input.keyboard.once('keydown-H', () => this.scene.start('TutorialScene'));
     this.setupKonami();
 
+    // Attract mode: if nobody touches anything for a while, cut to a full
+    // all-CPU demo race. Any input on the title resets the idle timer.
+    this.idleTime = 0;
+    this.attractStarting = false; // reset — scenes are singletons across restarts
+    const wake = () => { this.idleTime = 0; };
+    this.input.keyboard.on('keydown', wake);
+    this.input.on('pointerdown', wake);
+    this.input.on('pointermove', wake);
+
     // Menu music (funky once Rainbow Road is unlocked). Audio unlocks on the
     // first user gesture.
     const track = this.psychedelic ? 'Funky' : 'Menu';
@@ -130,6 +141,12 @@ export default class TitleScene extends Phaser.Scene {
     const dt = Math.min(deltaMs, 50) / 1000;
     this.demoT = (this.demoT || 0) + dt;
     this.updateDemo(dt);
+
+    // Idle long enough → roll the attract demo race.
+    if (!this.attractStarting) {
+      this.idleTime = (this.idleTime || 0) + dt;
+      if (this.idleTime >= ATTRACT_DELAY) this.startAttract();
+    }
 
     if (this.clouds) {
       const W = this.scale.width;
@@ -495,5 +512,19 @@ export default class TitleScene extends Phaser.Scene {
   startGame(count) {
     Audio.resumeAudio();
     this.scene.start('CupSelectScene', { playerCount: count });
+  }
+
+  // Kick off a self-running, all-CPU demo race (one random world, hard AI).
+  startAttract() {
+    this.attractStarting = true;
+    const cup = CUPS[Math.floor(Math.random() * CUPS.length)].id;
+    initGrandPrix(this.registry, 0, [], cup); // playerCount 0 → a full grid of AI
+    const gp = this.registry.get('gp');
+    gp.themeOrder = [gp.themeOrder[0]]; // a single demo race
+    gp.difficulty = 'hard'; // sharp racing for the showcase
+    gp.debugAllAI = true;
+    gp.attract = true;
+    this.registry.set('gp', gp);
+    this.scene.start('RaceScene');
   }
 }

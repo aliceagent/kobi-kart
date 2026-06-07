@@ -43,6 +43,11 @@ export default class UIScene extends Phaser.Scene {
       stroke: '#000000', strokeThickness: 4,
     }).setOrigin(0.5).setDepth(12);
 
+    this.attractText = this.add.text(W / 2, this.scale.height - 28, '', {
+      fontFamily: 'monospace', fontSize: '17px', color: '#ffe14d', fontStyle: 'bold',
+      stroke: '#000000', strokeThickness: 5,
+    }).setOrigin(0.5).setDepth(40);
+
     const style = {
       fontFamily: 'monospace', fontSize: '16px', color: '#ffffff',
       stroke: '#000000', strokeThickness: 4,
@@ -287,7 +292,14 @@ export default class UIScene extends Phaser.Scene {
     const total = race.gp.themeOrder.length;
     this.banner.setText(`RACE ${race.gp.raceIndex + 1}/${total}   ·   ${themeName}   ·   LAP ${lap}/${LAPS}`);
     this.countdownLabel.setText(race.countdownText || '');
-    this.revHint.setText(race.state === 'countdown' ? 'tap BOOST as GO! flashes for a 🚀 rocket start' : '');
+    const attract = !!(race.gp && race.gp.attract);
+    this.revHint.setText(race.state === 'countdown' && !attract ? 'tap BOOST as GO! flashes for a 🚀 rocket start' : '');
+    if (attract) {
+      this.attractText.setText('▶  DEMO  —  press any key to play');
+      this.attractText.setAlpha(0.55 + 0.45 * Math.sin((race.elapsed || 0) * 4));
+    } else {
+      this.attractText.setText('');
+    }
 
     // When only the last racer remains, show their 60s finish clock.
     if (race.stragglerDeadline !== null && race.state === 'racing') {

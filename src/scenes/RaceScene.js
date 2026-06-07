@@ -46,6 +46,7 @@ export default class RaceScene extends Phaser.Scene {
 
   create() {
     this.gp = this.registry.get('gp');
+    this.attract = !!this.gp.attract; // self-running all-CPU demo (no players)
     this.aiCfg = AI_DIFFICULTY[this.gp.difficulty] || AI_DIFFICULTY.medium;
     this.carSpeed = CAR_SPEEDS[this.registry.get('carSpeed')] || 1;
     const themeName = this.gp.themeOrder[this.gp.raceIndex];
@@ -136,12 +137,19 @@ export default class RaceScene extends Phaser.Scene {
       Audio.stopMusic();
     });
 
-    // Pause (P). While paused, the race update is frozen but key listeners
-    // still fire, so you can resume (P) or quit to the menu (Q / Esc).
     this.paused = false;
-    this.input.keyboard.on('keydown-P', () => { if (this.state !== 'finished') this.togglePause(); });
-    this.input.keyboard.on('keydown-Q', () => { if (this.paused) this.scene.start('TitleScene'); });
-    this.input.keyboard.on('keydown-ESC', () => { if (this.paused) this.scene.start('TitleScene'); });
+    if (this.attract) {
+      // Attract demo: any key or click drops back to the title to play for real.
+      const leave = () => this.scene.start('TitleScene');
+      this.input.keyboard.once('keydown', leave);
+      this.input.once('pointerdown', leave);
+    } else {
+      // Pause (P). While paused, the race update is frozen but key listeners
+      // still fire, so you can resume (P) or quit to the menu (Q / Esc).
+      this.input.keyboard.on('keydown-P', () => { if (this.state !== 'finished') this.togglePause(); });
+      this.input.keyboard.on('keydown-Q', () => { if (this.paused) this.scene.start('TitleScene'); });
+      this.input.keyboard.on('keydown-ESC', () => { if (this.paused) this.scene.start('TitleScene'); });
+    }
   }
 
   togglePause() {
@@ -380,7 +388,8 @@ export default class RaceScene extends Phaser.Scene {
     this.registry.set('gp', this.gp);
 
     this.cameras.main.flash(300, 255, 255, 255);
-    this.time.delayedCall(1000, () => this.scene.start('ResultsScene'));
+    // The attract demo loops back to the title instead of showing results.
+    this.time.delayedCall(1000, () => this.scene.start(this.attract ? 'TitleScene' : 'ResultsScene'));
   }
 
   // ------------------------------------------------------------- items -------
