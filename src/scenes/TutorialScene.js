@@ -120,12 +120,138 @@ export default class TutorialScene extends Phaser.Scene {
   }
 
   drawTrack() {
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const { cx, cy, outerRx, outerRy, innerRx, innerRy } = OVAL;
     const g = this.add.graphics().setDepth(0);
-    g.fillStyle(0x7ec850, 1); g.fillRect(0, 0, this.scale.width, this.scale.height);
-    g.fillStyle(0xffffff, 1); g.fillEllipse(OVAL.cx, OVAL.cy, OVAL.outerRx * 2 + 14, OVAL.outerRy * 2 + 14);
-    g.fillStyle(0x4a4a55, 1); g.fillEllipse(OVAL.cx, OVAL.cy, OVAL.outerRx * 2, OVAL.outerRy * 2);
-    g.fillStyle(0xffffff, 1); g.fillEllipse(OVAL.cx, OVAL.cy, OVAL.innerRx * 2 + 14, OVAL.innerRy * 2 + 14);
-    g.fillStyle(0x7ec850, 1); g.fillEllipse(OVAL.cx, OVAL.cy, OVAL.innerRx * 2, OVAL.innerRy * 2);
+
+    // Grass field — same palette as the Grassy world (terrain 0x7ec850).
+    g.fillStyle(0x7ec850, 1);
+    g.fillRect(0, 0, W, H);
+
+    // Subtle grass mottle for texture (deco / decoAlt greens).
+    let seed = 20259;
+    const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+    for (let i = 0; i < 130; i += 1) {
+      g.fillStyle(rnd() < 0.5 ? 0x74c046 : 0x8ad65c, 0.5);
+      g.fillEllipse(rnd() * W, rnd() * H, 26 + rnd() * 34, 13 + rnd() * 16);
+    }
+
+    // Soft grounding shadow beneath the track.
+    g.fillStyle(0x000000, 0.10);
+    g.fillEllipse(cx, cy + 12, outerRx * 2 + 30, outerRy * 2 + 30);
+
+    // Asphalt loop with the infield cut back out to grass.
+    g.fillStyle(0x4a4a55, 1);
+    g.fillEllipse(cx, cy, outerRx * 2, outerRy * 2);
+    g.fillStyle(0x55555f, 1); // faint asphalt sheen on the upper arc
+    g.fillEllipse(cx, cy - 6, outerRx * 2 - 18, outerRy * 2 - 18);
+    g.fillStyle(0x4a4a55, 1);
+    g.fillEllipse(cx, cy + 4, outerRx * 2 - 6, outerRy * 2 - 6);
+    g.fillStyle(0x7ec850, 1);
+    g.fillEllipse(cx, cy, innerRx * 2, innerRy * 2);
+
+    // Red/white kerbs hugging both road edges + crisp white edge lines.
+    this.drawKerb(g, cx, cy, outerRx, outerRy, 10);
+    this.drawKerb(g, cx, cy, innerRx, innerRy, 10);
+    g.lineStyle(2.5, 0xffffff, 0.9);
+    g.strokeEllipse(cx, cy, (outerRx - 8) * 2, (outerRy - 8) * 2);
+    g.strokeEllipse(cx, cy, (innerRx + 8) * 2, (innerRy + 8) * 2);
+
+    // Dashed yellow centre line.
+    this.drawDashedEllipse(g, cx, cy, (outerRx + innerRx) / 2, (outerRy + innerRy) / 2, 4, 0xffe14d);
+
+    // Checkered start / finish across the bottom straight (where the kart spawns).
+    this.drawStartLine(g);
+
+    // Roadside scenery — all kept clear of the road band.
+    this.drawTyres(g, 30, cy);
+    this.drawTyres(g, W - 30, cy);
+    this.drawTree(g, 58, H - 66, 1.1);
+    this.drawTree(g, W - 58, H - 70, 1.2);
+    this.drawTree(g, 92, 224, 0.85);
+    this.drawTree(g, W - 96, 218, 0.9);
+    this.drawFlowers(g, cx, cy);
+  }
+
+  // A red/white kerb ring centred on an ellipse edge.
+  drawKerb(g, cx, cy, rx, ry, thick) {
+    const perim = Math.PI * (3 * (rx + ry) - Math.sqrt((3 * rx + ry) * (rx + 3 * ry)));
+    const segs = Math.max(16, Math.round(perim / 20));
+    let prev = null;
+    for (let i = 0; i <= segs; i += 1) {
+      const a = (i / segs) * Math.PI * 2;
+      const pt = { x: cx + Math.cos(a) * rx, y: cy + Math.sin(a) * ry };
+      if (prev) {
+        g.lineStyle(thick, i % 2 ? 0xe2403a : 0xffffff, 1);
+        g.beginPath(); g.moveTo(prev.x, prev.y); g.lineTo(pt.x, pt.y); g.strokePath();
+      }
+      prev = pt;
+    }
+  }
+
+  // A dashed ellipse outline (lane marking).
+  drawDashedEllipse(g, cx, cy, rx, ry, thick, color) {
+    const perim = Math.PI * (3 * (rx + ry) - Math.sqrt((3 * rx + ry) * (rx + 3 * ry)));
+    const segs = Math.max(16, Math.round(perim / 24));
+    let prev = null;
+    for (let i = 0; i <= segs; i += 1) {
+      const a = (i / segs) * Math.PI * 2;
+      const pt = { x: cx + Math.cos(a) * rx, y: cy + Math.sin(a) * ry };
+      if (prev && i % 2 === 1) {
+        g.lineStyle(thick, color, 0.9);
+        g.beginPath(); g.moveTo(prev.x, prev.y); g.lineTo(pt.x, pt.y); g.strokePath();
+      }
+      prev = pt;
+    }
+  }
+
+  drawStartLine(g) {
+    const { cx, cy, innerRy, outerRy } = OVAL;
+    const top = cy + innerRy + 4;
+    const bot = cy + outerRy - 4;
+    const cell = 19;
+    const cols = 2;
+    const cw = 38 / cols;
+    const x0 = cx - 19;
+    for (let r = 0, yy = top; yy < bot; yy += cell, r += 1) {
+      for (let c = 0; c < cols; c += 1) {
+        g.fillStyle((r + c) % 2 === 0 ? 0xffffff : 0x111111, 1);
+        g.fillRect(x0 + c * cw, yy, cw + 0.5, Math.min(cell, bot - yy) + 0.5);
+      }
+    }
+  }
+
+  drawTree(g, tx, ty, s) {
+    g.fillStyle(0x000000, 0.12); g.fillEllipse(tx, ty + 26 * s, 46 * s, 13 * s);
+    g.fillStyle(0x6b4423, 1); g.fillRect(tx - 5 * s, ty, 10 * s, 28 * s);
+    g.fillStyle(0x2f7d36, 1);
+    g.fillCircle(tx, ty - 2 * s, 26 * s); g.fillCircle(tx - 18 * s, ty + 8 * s, 18 * s); g.fillCircle(tx + 18 * s, ty + 8 * s, 18 * s);
+    g.fillStyle(0x57b24d, 1); g.fillCircle(tx - 7 * s, ty - 10 * s, 12 * s);
+  }
+
+  drawTyres(g, x, y) {
+    g.fillStyle(0x000000, 0.12); g.fillEllipse(x, y + 8, 26, 9);
+    for (let i = 0; i < 3; i += 1) {
+      const cyy = y - i * 11;
+      g.fillStyle(0x1c1c22, 1); g.fillCircle(x, cyy, 9);
+      g.fillStyle(0x33333c, 1); g.fillCircle(x, cyy, 4.5);
+    }
+  }
+
+  drawFlowers(g, cx, cy) {
+    const cols = [0xff5d8f, 0xffd23f, 0xffffff, 0x4d8bff, 0xff8a3c];
+    let seed = 99;
+    const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+    for (let i = 0; i < 24; i += 1) {
+      const a = rnd() * Math.PI * 2;
+      const rr = 0.3 + rnd() * 0.7;
+      const x = cx + Math.cos(a) * rr * 205;
+      const y = cy + Math.sin(a) * rr * 54;
+      g.fillStyle(0x3f8a32, 1); g.fillCircle(x, y + 2, 2);
+      g.fillStyle(cols[i % cols.length], 1); g.fillCircle(x, y, 3.2);
+      g.fillStyle(0xffe884, 0.95); g.fillCircle(x, y, 1.3);
+    }
   }
 
   // -------------------------------------------------------------- steps ----
