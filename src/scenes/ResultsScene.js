@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { totalStandings } from '../GrandPrix.js';
 import * as Audio from '../Audio.js';
-import { addMuteButton } from '../ui.js';
+import { addMuteButton, fadeIn, transitionTo } from '../ui.js';
 
 const MEDAL = [0xffd23f, 0xc7ccd6, 0xcd7f32, 0x8a8f96]; // gold / silver / bronze / grey
 const ORD = ['1st', '2nd', '3rd', '4th'];
@@ -14,6 +14,7 @@ export default class ResultsScene extends Phaser.Scene {
   create() {
     const W = this.scale.width;
     const H = this.scale.height;
+    fadeIn(this);
     this.gp = this.registry.get('gp');
     const results = this.gp.lastResults || [];
     const totalRaces = this.gp.themeOrder.length;
@@ -161,13 +162,14 @@ export default class ResultsScene extends Phaser.Scene {
   }
 
   advance(isLast) {
+    if (this._transitioning) return;
     Audio.stopMusic();
     if (isLast) {
-      this.scene.start('CeremonyScene');
+      transitionTo(this, 'CeremonyScene');
     } else {
       this.gp.raceIndex += 1;
       this.registry.set('gp', this.gp);
-      this.scene.start('RaceScene');
+      transitionTo(this, 'RaceScene');
     }
   }
 }

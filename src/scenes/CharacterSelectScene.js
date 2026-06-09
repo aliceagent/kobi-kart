@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { ROSTER, initGrandPrix, cupById } from '../GrandPrix.js';
 import { makeKartTexture } from '../textures.js';
 import * as Audio from '../Audio.js';
-import { addMuteButton } from '../ui.js';
+import { addMuteButton, fadeIn, transitionTo } from '../ui.js';
 
 const PLAYER_TINT = [0xff4d4d, 0x4d8bff]; // P1 / P2 highlight colours
 
@@ -19,6 +19,7 @@ export default class CharacterSelectScene extends Phaser.Scene {
   create() {
     const W = this.scale.width;
     const H = this.scale.height;
+    fadeIn(this);
     ROSTER.forEach((r) => makeKartTexture(this, `kart_${r.id}`, r.color, r.trim));
 
     const bg = this.add.graphics();
@@ -139,12 +140,12 @@ export default class CharacterSelectScene extends Phaser.Scene {
 
   editCup() {
     Audio.sfx('beep');
-    this.scene.start('CupSelectScene', { playerCount: this.playerCount });
+    transitionTo(this, 'CupSelectScene', { playerCount: this.playerCount });
   }
 
   editSettings() {
     Audio.sfx('beep');
-    this.scene.start('SettingsScene', { from: 'character', playerCount: this.playerCount, cup: this.cup });
+    transitionTo(this, 'SettingsScene', { from: 'character', playerCount: this.playerCount, cup: this.cup });
   }
 
   // A "back" button (top-left) that returns to the cup-select screen.
@@ -168,7 +169,7 @@ export default class CharacterSelectScene extends Phaser.Scene {
 
   goBack() {
     Audio.sfx('beep');
-    this.scene.start('CupSelectScene', { playerCount: this.playerCount });
+    transitionTo(this, 'CupSelectScene', { playerCount: this.playerCount });
   }
 
   setupKeys() {
@@ -223,7 +224,7 @@ export default class CharacterSelectScene extends Phaser.Scene {
   start() {
     initGrandPrix(this.registry, this.playerCount, this.picks, this.cup);
     this.cameras.main.flash(250, 255, 255, 255);
-    this.time.delayedCall(260, () => this.scene.start('RaceScene'));
+    this.time.delayedCall(260, () => transitionTo(this, 'RaceScene'));
   }
 
   redraw() {

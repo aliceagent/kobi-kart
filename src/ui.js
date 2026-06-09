@@ -1,4 +1,28 @@
+import Phaser from 'phaser';
 import * as Audio from './Audio.js';
+
+// --- Scene transitions ----------------------------------------------------
+// A short, consistent black dip between every screen so the game flows as one
+// piece instead of hard-cutting. Call fadeIn() at the top of each scene's
+// create(); call transitionTo() instead of scene.start() to leave a scene.
+
+export function fadeIn(scene, duration = 280) {
+  scene._transitioning = false; // reset the guard each time the scene is entered
+  scene.cameras.main.fadeIn(duration, 0, 0, 0);
+}
+
+export function transitionTo(scene, key, data, opts = {}) {
+  if (scene._transitioning) return; // ignore repeat triggers while fading out
+  scene._transitioning = true;
+  const duration = opts.duration || 280;
+  // Fade any sibling overlay cameras too (e.g. the race HUD on UIScene).
+  (opts.alsoFade || []).forEach((cam) => { if (cam) cam.fadeOut(duration, 0, 0, 0); });
+  const cam = scene.cameras.main;
+  cam.fadeOut(duration, 0, 0, 0);
+  cam.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
+    scene.scene.start(key, data);
+  });
+}
 
 // A small speaker toggle in the bottom-right corner, plus the "M" key.
 export function addMuteButton(scene) {

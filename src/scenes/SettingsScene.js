@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import * as Audio from '../Audio.js';
-import { addMuteButton } from '../ui.js';
+import { addMuteButton, fadeIn, transitionTo } from '../ui.js';
 
 // level (1-3) drives the little indicator icon drawn on each card.
 const DIFFICULTY = [
@@ -32,6 +32,7 @@ export default class SettingsScene extends Phaser.Scene {
     const H = this.scale.height;
     this.t = 0;
     this.allCards = [];
+    fadeIn(this);
 
     this.drawBackground(W, H);
     this.glowGfx = this.add.graphics().setDepth(1); // animated selection halo (behind cards)
@@ -213,9 +214,9 @@ export default class SettingsScene extends Phaser.Scene {
 
   back() {
     if (this.fromCharacter) {
-      this.scene.start('CharacterSelectScene', { playerCount: this.playerCount, cup: this.cup });
+      transitionTo(this, 'CharacterSelectScene', { playerCount: this.playerCount, cup: this.cup });
     } else {
-      this.scene.start('TitleScene');
+      transitionTo(this, 'TitleScene');
     }
   }
 

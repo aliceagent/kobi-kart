@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { totalStandings } from '../GrandPrix.js';
 import * as Audio from '../Audio.js';
-import { addMuteButton } from '../ui.js';
+import { addMuteButton, fadeIn, transitionTo } from '../ui.js';
 
 export default class CeremonyScene extends Phaser.Scene {
   constructor() {
@@ -11,6 +11,7 @@ export default class CeremonyScene extends Phaser.Scene {
   create() {
     const W = this.scale.width;
     const H = this.scale.height;
+    fadeIn(this);
     this.gp = this.registry.get('gp');
     const standings = totalStandings(this.gp);
     const champ = standings[0];
@@ -117,7 +118,7 @@ export default class CeremonyScene extends Phaser.Scene {
     this.time.delayedCall(900, () => Audio.sfx('fanfare'));
     this.events.once('shutdown', () => Audio.stopMusic());
 
-    const go = () => this.scene.start('TitleScene');
+    const go = () => transitionTo(this, 'TitleScene');
     this.input.keyboard.once('keydown-SPACE', go);
     this.input.keyboard.once('keydown-ENTER', go);
     this.add.zone(W / 2, H - 24, 460, 50).setInteractive({ useHandCursor: true }).once('pointerdown', go);

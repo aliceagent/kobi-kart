@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { CUPS } from '../GrandPrix.js';
 import { THEMES } from '../TrackGenerator.js';
 import * as Audio from '../Audio.js';
-import { addMuteButton } from '../ui.js';
+import { addMuteButton, fadeIn, transitionTo } from '../ui.js';
 
 const WORLD_LABEL = {
   Grassy: '🌳 Grassy', Beach: '🏖 Beach', Ice: '❄ Ice', Candy: '🍭 Candy',
@@ -34,6 +34,7 @@ export default class CupSelectScene extends Phaser.Scene {
     const W = this.scale.width;
     const H = this.scale.height;
     this.t = 0;
+    fadeIn(this);
 
     this.drawBackground(W, H);
 
@@ -74,7 +75,7 @@ export default class CupSelectScene extends Phaser.Scene {
     this.leftKeys = [KC.A, KC.LEFT].map((c) => this.input.keyboard.addKey(c));
     this.rightKeys = [KC.D, KC.RIGHT].map((c) => this.input.keyboard.addKey(c));
     this.confirmKeys = [KC.SPACE, KC.ENTER, KC.E, KC.W, KC.UP].map((c) => this.input.keyboard.addKey(c));
-    this.input.keyboard.on('keydown-ESC', () => this.scene.start('TitleScene'));
+    this.input.keyboard.on('keydown-ESC', () => transitionTo(this, 'TitleScene'));
 
     this.redraw();
     addMuteButton(this);
@@ -245,7 +246,7 @@ export default class CupSelectScene extends Phaser.Scene {
     Audio.sfx('pickup');
     const cup = this.panels[this.cursor].cup.id;
     this.cameras.main.flash(160, 255, 255, 255);
-    this.time.delayedCall(140, () => this.scene.start('CharacterSelectScene', { playerCount: this.playerCount, cup }));
+    this.time.delayedCall(140, () => transitionTo(this, 'CharacterSelectScene', { playerCount: this.playerCount, cup }));
   }
 
   update(time, deltaMs) {

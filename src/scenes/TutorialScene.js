@@ -3,7 +3,7 @@ import Kart, { TUNE } from '../Kart.js';
 import { makeKartTexture, makeGameTextures } from '../textures.js';
 import { ROSTER } from '../GrandPrix.js';
 import * as Audio from '../Audio.js';
-import { addMuteButton } from '../ui.js';
+import { addMuteButton, fadeIn, transitionTo } from '../ui.js';
 
 // A practice oval (road band between two ellipses) centred on screen.
 const OVAL = { cx: 480, cy: 415, outerRx: 410, outerRy: 195, innerRx: 250, innerRy: 75 };
@@ -16,6 +16,7 @@ export default class TutorialScene extends Phaser.Scene {
   create() {
     const W = this.scale.width;
     const H = this.scale.height;
+    fadeIn(this);
 
     makeGameTextures(this);
     ROSTER.forEach((r) => makeKartTexture(this, `kart_${r.id}`, r.color, r.trim));
@@ -454,7 +455,7 @@ export default class TutorialScene extends Phaser.Scene {
   }
 
   exit() {
-    this.scene.start('TitleScene');
+    transitionTo(this, 'TitleScene');
   }
 
   advance() {

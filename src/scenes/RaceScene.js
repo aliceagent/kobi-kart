@@ -4,6 +4,7 @@ import { generateTrack } from '../TrackGenerator.js';
 import { THEME_PROPS } from '../Props.js';
 import { ROSTER, POINTS, LAPS, AI_DIFFICULTY, CAR_SPEEDS } from '../GrandPrix.js';
 import { makeKartTexture, makeGameTextures } from '../textures.js';
+import { fadeIn, transitionTo } from '../ui.js';
 import * as Audio from '../Audio.js';
 
 const WORLD_W = 2800;
@@ -117,6 +118,7 @@ export default class RaceScene extends Phaser.Scene {
     this.camCenter = new Phaser.Math.Vector2(this.start.x, this.start.y);
     this.cameras.main.setBackgroundColor('#0e0e16');
     this.updateCamera(1);
+    fadeIn(this);
 
     this.state = 'countdown';
     this.countdown = 3.999;
@@ -140,21 +142,28 @@ export default class RaceScene extends Phaser.Scene {
     this.paused = false;
     if (this.attract) {
       // Attract demo: any key or click drops back to the title to play for real.
-      const leave = () => this.scene.start('TitleScene');
+      const leave = () => this.leaveTo('TitleScene');
       this.input.keyboard.once('keydown', leave);
       this.input.once('pointerdown', leave);
     } else {
       // Pause (P). While paused, the race update is frozen but key listeners
       // still fire, so you can resume (P) or quit to the menu (Q / Esc).
       this.input.keyboard.on('keydown-P', () => { if (this.state !== 'finished') this.togglePause(); });
-      this.input.keyboard.on('keydown-Q', () => { if (this.paused) this.scene.start('TitleScene'); });
-      this.input.keyboard.on('keydown-ESC', () => { if (this.paused) this.scene.start('TitleScene'); });
+      this.input.keyboard.on('keydown-Q', () => { if (this.paused) this.leaveTo('TitleScene'); });
+      this.input.keyboard.on('keydown-ESC', () => { if (this.paused) this.leaveTo('TitleScene'); });
     }
   }
 
   togglePause() {
     this.paused = !this.paused;
     Audio.sfx('beep');
+  }
+
+  // Fade out of the race, dipping the HUD overlay camera along with the world.
+  leaveTo(key, data) {
+    const ui = this.scene.get('UIScene');
+    const uiCam = ui && ui.cameras ? ui.cameras.main : null;
+    transitionTo(this, key, data, { alsoFade: uiCam ? [uiCam] : [] });
   }
 
   // ---------------------------------------------------------------- setup ----
@@ -389,7 +398,7 @@ export default class RaceScene extends Phaser.Scene {
 
     this.cameras.main.flash(300, 255, 255, 255);
     // The attract demo loops back to the title instead of showing results.
-    this.time.delayedCall(1000, () => this.scene.start(this.attract ? 'TitleScene' : 'ResultsScene'));
+    this.time.delayedCall(1000, () => this.leaveTo(this.attract ? 'TitleScene' : 'ResultsScene'));
   }
 
   // ------------------------------------------------------------- items -------

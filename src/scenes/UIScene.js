@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { LAPS } from '../GrandPrix.js';
 import { TUNE } from '../Kart.js';
-import { addMuteButton } from '../ui.js';
+import { addMuteButton, fadeIn } from '../ui.js';
 import * as Audio from '../Audio.js';
 
 function ordinal(n) {
@@ -21,6 +21,7 @@ export default class UIScene extends Phaser.Scene {
 
   create() {
     const W = this.scale.width;
+    fadeIn(this);
     this.speedGfx = this.add.graphics().setDepth(8); // boost speed-lines (behind HUD)
     this.lastLeadLap = 0;
     this.announcedFinalLap = false;

@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { ROSTER, initGrandPrix, CUPS } from '../GrandPrix.js';
 import * as Audio from '../Audio.js';
-import { addMuteButton } from '../ui.js';
+import { addMuteButton, fadeIn, transitionTo } from '../ui.js';
 
 const ATTRACT_DELAY = 12; // seconds idle on the title before the demo race kicks in
 
@@ -24,6 +24,7 @@ export default class TitleScene extends Phaser.Scene {
   create() {
     const W = this.scale.width;
     const H = this.scale.height;
+    fadeIn(this);
     this.psychedelic = !!this.registry.get('rainbow');
     this.psyPhase = 0;
     this.karts = [];
@@ -58,9 +59,9 @@ export default class TitleScene extends Phaser.Scene {
     this.makeButton(W / 2, H * 0.54, '2 PLAYERS', 0x4d8bff, () => this.startGame(2), { h: 52 });
 
     this.makeButton(W / 2 - 162, H * 0.645, 'HOW TO PLAY', 0x2fa86a,
-      () => this.scene.start('TutorialScene'), { w: 300, h: 44, fontSize: 18 });
+      () => transitionTo(this, 'TutorialScene'), { w: 300, h: 44, fontSize: 18 });
     this.makeButton(W / 2 + 162, H * 0.645, 'SETTINGS', 0x9b6bce,
-      () => this.scene.start('SettingsScene'), { w: 300, h: 44, fontSize: 20 });
+      () => transitionTo(this, 'SettingsScene'), { w: 300, h: 44, fontSize: 20 });
 
     // Controls — one labelled line per player so every key is clear. A dark
     // strip + outline keeps them readable over the grass.
@@ -82,8 +83,8 @@ export default class TitleScene extends Phaser.Scene {
 
     this.input.keyboard.once('keydown-ONE', () => this.startGame(1));
     this.input.keyboard.once('keydown-TWO', () => this.startGame(2));
-    this.input.keyboard.once('keydown-S', () => this.scene.start('SettingsScene'));
-    this.input.keyboard.once('keydown-H', () => this.scene.start('TutorialScene'));
+    this.input.keyboard.once('keydown-S', () => transitionTo(this, 'SettingsScene'));
+    this.input.keyboard.once('keydown-H', () => transitionTo(this, 'TutorialScene'));
     this.setupKonami();
 
     // Attract mode: if nobody touches anything for a while, cut to a full
@@ -511,7 +512,7 @@ export default class TitleScene extends Phaser.Scene {
 
   startGame(count) {
     Audio.resumeAudio();
-    this.scene.start('CupSelectScene', { playerCount: count });
+    transitionTo(this, 'CupSelectScene', { playerCount: count });
   }
 
   // Kick off a self-running, all-CPU demo race (one random world, hard AI).
@@ -525,6 +526,6 @@ export default class TitleScene extends Phaser.Scene {
     gp.debugAllAI = true;
     gp.attract = true;
     this.registry.set('gp', gp);
-    this.scene.start('RaceScene');
+    transitionTo(this, 'RaceScene');
   }
 }
