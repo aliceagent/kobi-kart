@@ -90,6 +90,14 @@ export default class Kart {
     this.bounceCd = 0; // cooldown so a bounce pad fires once per touch
     this.bogTimer = 0; // bogged engine after a botched (too-early) rocket start
     this.starTimer = 0; // invincibility star: immune + faster + plows others
+    // Ramp jump (shortcut): airborne along a locked launch velocity, immune to
+    // walls/obstacles/off-road while in the air.
+    this.airTimer = 0;
+    this.airTotal = 0;
+    this.airVX = 0;
+    this.airVY = 0;
+    this.jumpCd = 0; // cooldown so a ramp can't re-fire mid-landing
+    this.justLanded = false; // set the frame the kart touches down (scene reads it)
     this.heldItem = null;
     this.heldCount = 0; // ammo for triple-mushroom
     this.orbitShells = 0; // orbiting green shells (triple-shell)
@@ -155,6 +163,23 @@ export default class Kart {
     }
   }
 
+  // Launch into a ramp jump: glide along (vx, vy) for `dur` seconds, airborne.
+  launch(vx, vy, dur) {
+    this.airTimer = dur;
+    this.airTotal = dur;
+    this.airVX = vx;
+    this.airVY = vy;
+    this.heading = Math.atan2(vy, vx);
+    this.jumpCd = dur + 0.45;
+    // No drift carry through a jump.
+    this.drifting = false;
+    this.driftDir = 0;
+    this.driftCharge = 0;
+    this.driftStraight = 0;
+    this.driftSparkTier = 0;
+    this.miniTurbo = 0;
+  }
+
   // terrain describes the surface under the kart this frame:
   //   { offRoad: 'grass'|'sand'|'ice'|'mud'|'fatal', grip: <=1, capMul: <=1 }
   // grip < 1 reduces traction (wet roads slide); off-road 'ice' is the slickest.
@@ -168,6 +193,7 @@ export default class Kart {
     if (this.starTimer > 0) this.starTimer -= dt;
     if (this.bounceCd > 0) this.bounceCd -= dt;
     if (this.bogTimer > 0) this.bogTimer -= dt;
+    if (this.jumpCd > 0) this.jumpCd -= dt;
     if (this.oilImmune > 0) this.oilImmune -= dt;
     if (this.shieldTimer > 0) this.shieldTimer -= dt;
 
@@ -196,6 +222,23 @@ export default class Kart {
       this.knockX *= decay;
       this.knockY *= decay;
       this.boosting = false;
+      return;
+    }
+
+    // Airborne on a ramp jump: coast along the locked launch velocity, ignoring
+    // steering and surface. Height is conveyed visually by the scene.
+    if (this.airTimer > 0) {
+      this.airTimer -= dt;
+      this.speed = Math.hypot(this.airVX, this.airVY);
+      this.vx = this.airVX;
+      this.vy = this.airVY;
+      this.x += this.vx * dt;
+      this.y += this.vy * dt;
+      this.sprite.rotation = this.heading;
+      this.knockX *= decay;
+      this.knockY *= decay;
+      this.boosting = false;
+      if (this.airTimer <= 0) this.justLanded = true;
       return;
     }
 

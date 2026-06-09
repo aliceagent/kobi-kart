@@ -66,6 +66,10 @@ export default class RaceScene extends Phaser.Scene {
     // Dirt shortcut (may be null): cuts a curve, a bit slower but shorter.
     this.shortcut = track.shortcut || null;
     this.shortcutHalf = (this.roadWidth * 0.72) / 2;
+    // A ramp + barrier gate the shortcut: hit the ramp at speed to launch over
+    // the wall; too slow and the wall blocks you. (Adds a rail for the wall.)
+    this.ramp = null;
+    this.setupShortcutJump();
 
     // Per-world road features / hazards (filled by drawTrack + createHazards).
     this.boostPads = [];
@@ -96,6 +100,7 @@ export default class RaceScene extends Phaser.Scene {
     this.fogGfx = this.add.graphics().setDepth(14);     // drifting fog (above karts)
     this.skidGfx = this.add.graphics().setDepth(1);     // drift skid marks (just above road)
     this.skidMarks = [];
+    this.jumpGfx = this.add.graphics().setDepth(2);     // ramp-jump shadows (below karts)
 
     this.projectiles = [];
     this.traps = [];
@@ -307,6 +312,41 @@ export default class RaceScene extends Phaser.Scene {
     return distToSegSq(x, y, s.ax, s.ay, s.bx, s.by) <= this.shortcutHalf * this.shortcutHalf;
   }
 
+  // Build the ramp + barrier that gate the shortcut. The ramp sits in the
+  // off-road middle of the strip (never on the racing line); the barrier wall
+  // sits just past it and is added to the rail set for collision. Hit the ramp
+  // with speed to launch over the wall; too slow and the wall stops you.
+  setupShortcutJump() {
+    const s = this.shortcut;
+    if (!s) return;
+    const dx = s.bx - s.ax;
+    const dy = s.by - s.ay;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len;
+    const uy = dy / len;
+    const nx = -uy; // perpendicular (across the strip)
+    const ny = ux;
+    const half = this.shortcutHalf;
+    // Ramp a little past the entrance, in the off-road middle of the strip.
+    const rampDist = Math.max(half + 18, len * 0.30);
+    const rx = s.ax + ux * rampDist;
+    const ry = s.ay + uy * rampDist;
+    const jumpDist = Math.max((len - rampDist) * 0.9, 90); // land near the exit
+    this.ramp = {
+      x: rx, y: ry, dx: ux, dy: uy, nx, ny,
+      r: half * 0.92, half, len, jumpDist,
+    };
+    // Barrier wall just past the ramp, spanning the strip — drawn + collided as
+    // a guard rail.
+    const wx = rx + ux * 30;
+    const wy = ry + uy * 30;
+    const span = half * 0.96;
+    this.shortcutWall = {
+      ax: wx - nx * span, ay: wy - ny * span, bx: wx + nx * span, by: wy + ny * span,
+    };
+    this.rails.push(this.shortcutWall);
+  }
+
   // ---------------------------------------------------------- progress -------
   progress(kart) {
     return kart.lap * this.centerline.length + kart.idxPos;
@@ -319,7 +359,7 @@ export default class RaceScene extends Phaser.Scene {
   // If a racer is wedged off the track (e.g. jammed into a V of guard rails)
   // and barely moving for a couple seconds, pop them back onto the racing line.
   rescueIfStuck(kart, dt) {
-    if (kart.finished || kart.falling) { kart.stuckTimer = 0; return; }
+    if (kart.finished || kart.falling || kart.airTimer > 0) { kart.stuckTimer = 0; return; }
     if (this.fatalOffRoad) return; // fatal-void worlds handle off-track via falling
     if (Math.abs(kart.speed) < 45 && !this.isOnRoad(kart.x, kart.y)) {
       kart.stuckTimer += dt;
@@ -801,6 +841,7 @@ export default class RaceScene extends Phaser.Scene {
   }
 
   resolveRails(kart, dt) {
+    if (kart.airTimer > 0) return; // flying over the barrier
     const r = kart.radius;
     for (const s of this.rails) {
       const c = closestOnSeg(kart.x, kart.y, s.ax, s.ay, s.bx, s.by);
@@ -819,6 +860,7 @@ export default class RaceScene extends Phaser.Scene {
   }
 
   resolveObstacles(kart) {
+    if (kart.airTimer > 0) return; // airborne karts clear ground obstacles
     for (const o of this.obstacles) {
       const dx = kart.x - o.x;
       const dy = kart.y - o.y;
@@ -984,12 +1026,14 @@ export default class RaceScene extends Phaser.Scene {
     this.updateMovers(dt);
     this.updateFog(dt);
     this.updateSkids(dt);
+    this.drawJumpShadows();
     this.shakeOnHit();
 
     // Collisions among all racers (falling karts are intangible).
     for (let i = 0; i < this.racers.length; i += 1) {
       for (let j = i + 1; j < this.racers.length; j += 1) {
         if (this.racers[i].falling || this.racers[j].falling) continue;
+        if (this.racers[i].airTimer > 0 || this.racers[j].airTimer > 0) continue; // jumping over
         this.resolveKartCollision(this.racers[i], this.racers[j]);
       }
     }
@@ -1214,13 +1258,13 @@ export default class RaceScene extends Phaser.Scene {
     const onRoad = this.isOnRoad(kart.x, kart.y);
     kart.drive(dt, input.steer, input.braking, input.boosting, onRoad, this.terrainFor(kart, onRoad));
     // Crosswind shoves the kart sideways (Storm).
-    if ((this.windX || this.windY) && !kart.falling) {
+    if ((this.windX || this.windY) && !kart.falling && kart.airTimer <= 0) {
       kart.x += this.windX * dt;
       kart.y += this.windY * dt;
     }
     // Currents (Coral): flow zones push the kart along the seabed. Forward-flow
     // zones are free speed; cross-flow zones nudge you toward the wall.
-    if (this.currents.length && !kart.falling && !kart.spunOut) {
+    if (this.currents.length && !kart.falling && !kart.spunOut && kart.airTimer <= 0) {
       for (const cur of this.currents) {
         if ((kart.x - cur.x) ** 2 + (kart.y - cur.y) ** 2 < cur.r * cur.r) {
           kart.x += cur.dx * cur.strength * dt;
@@ -1256,7 +1300,33 @@ export default class RaceScene extends Phaser.Scene {
 
   // Boost pads / speed strips give a brief boost; oil slicks spin you out.
   applyRoadFeatures(kart) {
-    if (kart.finished || kart.falling || kart.spunOut) return;
+    // Just touched down from a ramp jump: a dusty thump + a little speed reward.
+    if (kart.justLanded) {
+      kart.justLanded = false;
+      kart.padBoostTimer = Math.max(kart.padBoostTimer, 0.3);
+      this.burst(kart.x, kart.y, 0xbfa06a);
+      if (!kart.isAI) Audio.sfx('bump');
+    }
+    if (kart.finished || kart.falling || kart.spunOut || kart.airTimer > 0) return;
+    // Ramp: launch over the shortcut barrier if hit with speed, heading the
+    // right way down the strip.
+    if (this.ramp && kart.jumpCd <= 0) {
+      const r = this.ramp;
+      if ((kart.x - r.x) ** 2 + (kart.y - r.y) ** 2 < r.r * r.r) {
+        const sp = Math.hypot(kart.vx, kart.vy);
+        const dot = sp > 30
+          ? (kart.vx * r.dx + kart.vy * r.dy) / sp
+          : Math.cos(kart.heading) * r.dx + Math.sin(kart.heading) * r.dy;
+        if (kart.speed > 150 && dot > 0.25) {
+          const launchSpeed = Phaser.Math.Clamp(Math.max(kart.speed * 1.05, 360), 360, 560);
+          const airTime = Phaser.Math.Clamp(r.jumpDist / launchSpeed, 0.42, 0.85);
+          kart.launch(r.dx * launchSpeed, r.dy * launchSpeed, airTime);
+          this.burst(r.x, r.y, 0xffe14d);
+          if (!kart.isAI) Audio.sfx('boost');
+          return;
+        }
+      }
+    }
     if (this.boostPads.length) {
       for (const pad of this.boostPads) {
         if ((kart.x - pad.x) ** 2 + (kart.y - pad.y) ** 2 < pad.r * pad.r) {
@@ -1355,6 +1425,22 @@ export default class RaceScene extends Phaser.Scene {
     }
   }
 
+  // Ground shadows for airborne (ramp-jumping) karts. The shadow stays on the
+  // ground and shrinks/drops away as the kart rises, selling the height.
+  drawJumpShadows() {
+    const g = this.jumpGfx;
+    g.clear();
+    for (const r of this.racers) {
+      if (r.airTimer > 0 && !r.falling) {
+        const p = 1 - r.airTimer / r.airTotal; // 0 at takeoff → 1 at landing
+        const arc = Math.sin(Math.PI * p); // height 0..1..0
+        const drop = 6 + arc * 18; // shadow falls behind/below as it climbs
+        g.fillStyle(0x000000, 0.3 - arc * 0.14);
+        g.fillEllipse(r.x, r.y + drop, 30 - arc * 10, 13 - arc * 5);
+      }
+    }
+  }
+
   // Gentle camera shake the instant a human kart gets spun out (shell, oil,
   // lightning, geyser — any source).
   shakeOnHit() {
@@ -1394,7 +1480,14 @@ export default class RaceScene extends Phaser.Scene {
 
       // Boost flames + a speed-stretch on the kart whenever it's boosting.
       const boosting = r.itemBoostTimer > 0 || r.padBoostTimer > 0 || r.boosting;
-      if (!r.falling) {
+      if (!r.falling && r.airTimer > 0) {
+        // Airborne on a ramp jump: scale the sprite up at the top of the arc to
+        // read as height (shadow on the ground stays put).
+        const p = 1 - r.airTimer / r.airTotal;
+        const s = 1 + 0.34 * Math.sin(Math.PI * p);
+        r.sprite.scaleX += (s - r.sprite.scaleX) * 0.5;
+        r.sprite.scaleY += (s - r.sprite.scaleY) * 0.5;
+      } else if (!r.falling) {
         const stretched = boosting && !r.spunOut;
         const tx = stretched ? 1.16 : 1;
         const ty = stretched ? 0.9 : 1;
@@ -1543,6 +1636,45 @@ export default class RaceScene extends Phaser.Scene {
       const cx = s.ax + (s.bx - s.ax) * f; const cy = s.ay + (s.by - s.ay) * f;
       g.fillTriangle(cx - nx * 10 - tx * 7, cy - ny * 10 - ty * 7,
         cx + nx * 10 - tx * 7, cy + ny * 10 - ty * 7, cx + tx * 11, cy + ty * 11);
+    }
+    this.drawRamp(g);
+  }
+
+  // A launch ramp on the shortcut: a bright striped wedge with up-arrows that
+  // reads as "hit me at speed to fly over the barrier".
+  drawRamp(g) {
+    const r = this.ramp;
+    if (!r) return;
+    const ux = r.dx; const uy = r.dy; // along the strip
+    const nx = r.nx; const ny = r.ny; // across the strip
+    const halfW = r.half * 0.82; // half-width of the ramp
+    const back = 26; // length behind the takeoff lip
+    const lip = 16; // length of the bright takeoff edge
+    const cx = r.x; const cy = r.y;
+    const corner = (along, across) => ({ x: cx + ux * along + nx * across, y: cy + uy * along + ny * across });
+    // Ramp body (dark base + sloped surface) as a trapezoid widening to the lip.
+    const bl = corner(-back, -halfW); const br = corner(-back, halfW);
+    const fl = corner(lip, -halfW * 0.78); const fr = corner(lip, halfW * 0.78);
+    g.fillStyle(0x000000, 0.25);
+    g.fillPoints([corner(-back + 3, -halfW + 3), corner(-back + 3, halfW + 3), corner(lip + 3, halfW * 0.78 + 3), corner(lip + 3, -halfW * 0.78 + 3)].map((p) => new Phaser.Geom.Point(p.x, p.y)), true);
+    g.fillStyle(0x394150, 1); // ramp body
+    g.fillPoints([bl, br, fr, fl].map((p) => new Phaser.Geom.Point(p.x, p.y)), true);
+    // Light "slope" highlight toward the lip.
+    g.fillStyle(0x5a6678, 1);
+    g.fillPoints([corner(-back * 0.2, -halfW * 0.9), corner(-back * 0.2, halfW * 0.9), fr, fl].map((p) => new Phaser.Geom.Point(p.x, p.y)), true);
+    // Bright takeoff lip.
+    g.lineStyle(5, 0xffe14d, 1);
+    g.beginPath(); g.moveTo(fl.x, fl.y); g.lineTo(fr.x, fr.y); g.strokePath();
+    g.lineStyle(2, 0xffffff, 0.9);
+    g.beginPath(); g.moveTo(fl.x, fl.y); g.lineTo(fr.x, fr.y); g.strokePath();
+    // Up-arrows pointing toward the lip (direction of launch).
+    g.fillStyle(0xffe14d, 0.95);
+    for (let k = 0; k < 2; k += 1) {
+      const a = -back * 0.5 + k * 16;
+      const tip = corner(a + 10, 0);
+      const lw = corner(a - 2, -10);
+      const rw = corner(a - 2, 10);
+      g.fillTriangle(tip.x, tip.y, lw.x, lw.y, rw.x, rw.y);
     }
   }
 
