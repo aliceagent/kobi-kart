@@ -468,8 +468,8 @@ export default class RaceScene extends Phaser.Scene {
     Audio.sfx('item');
     if (item === 'boost') { kart.itemBoostTimer = 1.6; Audio.sfx('boost'); this.burst(kart.x, kart.y, 0xffd23f); }
     else if (item === 'tripleMushroom') { kart.itemBoostTimer = 1.35; Audio.sfx('boost'); this.burst(kart.x, kart.y, 0xff5fa2); }
-    else if (item === 'shield') { kart.shieldTimer = 6; }
-    else if (item === 'star') { kart.starTimer = 5.5; Audio.sfx('boost'); this.burst(kart.x, kart.y, 0xffe14d); }
+    else if (item === 'shield') { kart.shieldTimer = 6; Audio.sfx('shield'); }
+    else if (item === 'star') { kart.starTimer = 5.5; Audio.sfx('star'); this.burst(kart.x, kart.y, 0xffe14d); }
     else if (item === 'greenShell') this.spawnProjectile(kart, 'green');
     else if (item === 'redShell') this.spawnProjectile(kart, 'red');
     else if (item === 'blueShell') this.spawnProjectile(kart, 'blue');
@@ -508,6 +508,7 @@ export default class RaceScene extends Phaser.Scene {
 
   // type: 'green' (straight), 'red' (homing), 'blue' (leader-seeking).
   spawnProjectile(kart, type) {
+    if (!kart.isAI) Audio.sfx('shell');
     const ox = Math.cos(kart.heading);
     const oy = Math.sin(kart.heading);
     const homing = type !== 'green';
@@ -530,6 +531,7 @@ export default class RaceScene extends Phaser.Scene {
   }
 
   spawnTrap(kart) {
+    if (!kart.isAI) Audio.sfx('oildrop');
     const ox = Math.cos(kart.heading);
     const oy = Math.sin(kart.heading);
     const x = kart.x - ox * 28;
@@ -627,7 +629,7 @@ export default class RaceScene extends Phaser.Scene {
               // Reached the leader — spin them out and detonate.
               const landed = r.hit();
               this.burst(p.x, p.y, landed ? 0x4d8bff : 0x9fd6f5);
-              Audio.sfx('hit');
+              Audio.sfx(landed ? 'hit' : 'shieldbreak');
               dead = true;
               break;
             } else if (!p.hitSet.has(r.id)) {
@@ -640,7 +642,7 @@ export default class RaceScene extends Phaser.Scene {
           } else {
             const landed = r.hit();
             this.burst(p.x, p.y, landed ? 0x33c75a : 0x9fd6f5);
-            Audio.sfx('hit');
+            Audio.sfx(landed ? 'hit' : 'shieldbreak');
             dead = true;
             break;
           }
@@ -667,7 +669,7 @@ export default class RaceScene extends Phaser.Scene {
           if ((r.x - t.x) ** 2 + (r.y - t.y) ** 2 < (r.radius + 12) ** 2) {
             const landed = r.hit();
             this.burst(t.x, t.y, 0x15151c);
-            Audio.sfx('hit');
+            Audio.sfx(landed ? 'hit' : 'shieldbreak');
             if (landed) { dead = true; break; }
           }
         }
@@ -1305,7 +1307,7 @@ export default class RaceScene extends Phaser.Scene {
       kart.justLanded = false;
       kart.padBoostTimer = Math.max(kart.padBoostTimer, 0.3);
       this.burst(kart.x, kart.y, 0xbfa06a);
-      if (!kart.isAI) Audio.sfx('bump');
+      if (!kart.isAI) Audio.sfx('land');
     }
     if (kart.finished || kart.falling || kart.spunOut || kart.airTimer > 0) return;
     // Ramp: launch over the shortcut barrier if hit with speed, heading the
@@ -1322,7 +1324,7 @@ export default class RaceScene extends Phaser.Scene {
           const airTime = Phaser.Math.Clamp(r.jumpDist / launchSpeed, 0.42, 0.85);
           kart.launch(r.dx * launchSpeed, r.dy * launchSpeed, airTime);
           this.burst(r.x, r.y, 0xffe14d);
-          if (!kart.isAI) Audio.sfx('boost');
+          if (!kart.isAI) Audio.sfx('jump');
           return;
         }
       }
@@ -1363,7 +1365,7 @@ export default class RaceScene extends Phaser.Scene {
           kart.padBoostTimer = Math.max(kart.padBoostTimer, 0.2);
           kart.bounceCd = 0.5;
           this.burst(pad.x, pad.y, 0xffe14d);
-          if (!kart.isAI) Audio.sfx('bump');
+          if (!kart.isAI) Audio.sfx('bounce');
           break;
         }
       }
@@ -1395,7 +1397,7 @@ export default class RaceScene extends Phaser.Scene {
     kart.miniTurbo = 0;
     this.burst(kart.x, kart.y, tier ? tier.color : 0xffffff);
     if (!kart.isAI) {
-      Audio.sfx('boost');
+      Audio.sfx('drift', t); // brighter zip the higher the charge tier
       if (t >= 3) this.cameras.main.shake(140, 0.004); // a little punch on an ultra
     }
   }

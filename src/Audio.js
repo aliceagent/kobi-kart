@@ -164,27 +164,164 @@ function drumAt(kind, at, gain) {
 }
 
 // --- SFX --------------------------------------------------------------------
-function blip(freq, start, dur, type, gain) {
-  if (!enabled) return;
-  const c = ensure();
-  if (c) toneAt(freq, c.currentTime + start, dur, type, gain);
+// A tone that glides f0 -> f1 over `dur` (whooshes, zaps, boings, sweeps).
+function sweepAt(f0, f1, at, dur, type, gain) {
+  const c = ctx;
+  try {
+    const osc = c.createOscillator();
+    const g = c.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(f0, at);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(1, f1), at + dur);
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(gain, at + Math.min(0.02, dur * 0.3));
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+    osc.connect(g); g.connect(master);
+    osc.start(at); osc.stop(at + dur + 0.03);
+  } catch (e) { /* ignore */ }
 }
 
-export function sfx(name) {
+// A filtered noise burst (whoosh / impact / dust / crackle). The filter cutoff
+// can sweep f0 -> f1 across the burst for movement.
+function noiseAt(at, dur, gain, filt, f0, f1, q) {
+  const c = ctx;
+  try {
+    const len = Math.max(1, Math.floor(c.sampleRate * dur));
+    const buf = c.createBuffer(1, len, c.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i += 1) d[i] = Math.random() * 2 - 1;
+    const src = c.createBufferSource();
+    src.buffer = buf;
+    const bq = c.createBiquadFilter();
+    bq.type = filt;
+    bq.Q.value = q || 1;
+    bq.frequency.setValueAtTime(f0, at);
+    if (f1 && f1 !== f0) bq.frequency.exponentialRampToValueAtTime(Math.max(1, f1), at + dur);
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(gain, at + Math.min(0.015, dur * 0.25));
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+    src.connect(bq); bq.connect(g); g.connect(master);
+    src.start(at); src.stop(at + dur + 0.03);
+  } catch (e) { /* ignore */ }
+}
+
+// Several tones struck together (chord stab).
+function chordAt(freqs, at, dur, type, gain) {
+  for (const f of freqs) toneAt(f, at, dur, type, gain);
+}
+
+// Layered, characterful sound effects. `opt` carries extra data (e.g. the
+// drift charge tier). Every branch is best-effort; the master chain (compressor
+// + reverb) gives them body and tames the peaks when several fire at once.
+export function sfx(name, opt) {
+  if (!enabled) return;
+  const c = ensure();
+  if (!c) return;
+  const t = c.currentTime;
+  const n = noteFreq;
   switch (name) {
-    case 'beep': blip(520, 0, 0.18, 'square', 0.16); break;
-    case 'go': blip(880, 0, 0.35, 'square', 0.22); blip(1320, 0.05, 0.35, 'square', 0.12); break;
-    case 'pickup': blip(660, 0, 0.08, 'square', 0.14); blip(990, 0.08, 0.12, 'square', 0.14); break;
-    case 'item': blip(440, 0, 0.1, 'sawtooth', 0.14); blip(880, 0.06, 0.14, 'sawtooth', 0.1); break;
-    case 'boost': blip(220, 0, 0.3, 'sawtooth', 0.12); blip(440, 0, 0.3, 'square', 0.06); break;
-    case 'hit': blip(140, 0, 0.25, 'sawtooth', 0.16); break;
-    case 'bump': blip(120, 0, 0.06, 'square', 0.08); break;
-    case 'lap': blip(784, 0, 0.1, 'square', 0.14); blip(1047, 0.1, 0.18, 'square', 0.14); break;
-    case 'finallap': [659, 880, 1047, 1319].forEach((f, i) => blip(f, i * 0.1, 0.3, 'square', 0.2)); break;
-    case 'coin': blip(988, 0, 0.06, 'square', 0.12); blip(1319, 0.05, 0.12, 'square', 0.12); break;
-    case 'zap': [1320, 990, 660, 440, 1100].forEach((f, i) => blip(f, i * 0.04, 0.16, 'sawtooth', 0.18)); break;
-    case 'finish': [523, 659, 784, 1047].forEach((f, i) => blip(f, i * 0.12, 0.25, 'square', 0.18)); break;
-    case 'fanfare': [523, 523, 784, 1047, 1318].forEach((f, i) => blip(f, i * 0.16, 0.4, 'square', 0.2)); break;
+    case 'beep': // menu hover / countdown tick — a crisp pip
+      toneAt(760, t, 0.10, 'square', 0.13);
+      toneAt(1520, t, 0.05, 'square', 0.04);
+      break;
+    case 'go': // race start — whoosh + a bright triad
+      sweepAt(320, 920, t, 0.26, 'sawtooth', 0.14);
+      noiseAt(t, 0.3, 0.12, 'bandpass', 600, 2600, 1.2);
+      chordAt([n('C5'), n('E5'), n('G5'), n('C6')], t + 0.05, 0.5, 'square', 0.10);
+      break;
+    case 'pickup': // grab an item box — sparkly ascending arpeggio
+      [n('E5'), n('A5'), n('C6'), n('E6')].forEach((f, i) => toneAt(f, t + i * 0.05, 0.14, 'square', 0.11));
+      toneAt(n('E6') * 2, t + 0.2, 0.18, 'sine', 0.04);
+      break;
+    case 'item': // activate any item — quick power-up swell
+      sweepAt(420, 1100, t, 0.16, 'square', 0.10);
+      toneAt(n('C5'), t + 0.04, 0.16, 'sawtooth', 0.07);
+      break;
+    case 'boost': // meter boost / boost pad / mushroom — a real whoosh
+      noiseAt(t, 0.34, 0.15, 'bandpass', 480, 2700, 1.4);
+      sweepAt(180, 540, t, 0.32, 'sawtooth', 0.10);
+      toneAt(460, t, 0.3, 'square', 0.04);
+      break;
+    case 'drift': { // mini-turbo release — brighter with the charge tier (1..3)
+      const tier = Math.max(1, Math.min(3, opt || 1));
+      const base = 360 + tier * 150;
+      sweepAt(base * 0.6, base * 1.7, t, 0.2, 'square', 0.12);
+      noiseAt(t, 0.16, 0.09, 'highpass', 1800, 5200, 0.8);
+      toneAt(base * 2.2, t + 0.06, 0.18, 'sine', 0.05);
+      break;
+    }
+    case 'jump': // ramp launch — a rising "wheee"
+      sweepAt(300, 1500, t, 0.32, 'sine', 0.12);
+      noiseAt(t, 0.3, 0.09, 'bandpass', 800, 3200, 1.5);
+      break;
+    case 'land': // touchdown — thud + a little chirp
+      noiseAt(t, 0.1, 0.12, 'lowpass', 1300, 320, 1);
+      toneAt(160, t, 0.1, 'sine', 0.10);
+      toneAt(n('G4'), t + 0.04, 0.12, 'square', 0.06);
+      break;
+    case 'bounce': // bounce pad — cartoon boing
+      sweepAt(300, 820, t, 0.08, 'sine', 0.12);
+      sweepAt(820, 380, t + 0.08, 0.14, 'sine', 0.10);
+      break;
+    case 'hit': // spun out — punchy impact
+      noiseAt(t, 0.18, 0.18, 'lowpass', 1900, 280, 1);
+      sweepAt(260, 70, t, 0.22, 'sawtooth', 0.15);
+      drumAt('k', t, 0.12);
+      break;
+    case 'bump': // gentle knock (kart-kart / bystander)
+      noiseAt(t, 0.07, 0.10, 'lowpass', 700, 280, 1);
+      toneAt(150, t, 0.07, 'sine', 0.10);
+      break;
+    case 'shell': // fire a shell — a launching fwip
+      sweepAt(900, 320, t, 0.16, 'sawtooth', 0.11);
+      noiseAt(t, 0.14, 0.08, 'bandpass', 1200, 600, 2);
+      break;
+    case 'oildrop': // drop an oil slick — wet plop
+      noiseAt(t, 0.16, 0.12, 'lowpass', 900, 240, 0.7);
+      toneAt(170, t, 0.13, 'sine', 0.08);
+      break;
+    case 'shield': // shield up — shimmering rise
+      [n('C5'), n('G5'), n('C6'), n('E6')].forEach((f, i) => toneAt(f, t + i * 0.05, 0.32, 'sine', 0.06));
+      sweepAt(400, 1200, t, 0.26, 'triangle', 0.05);
+      break;
+    case 'shieldbreak': // a hit blocked by the shield — glassy shatter
+      noiseAt(t, 0.12, 0.12, 'highpass', 2600, 6000, 0.8);
+      [1800, 1400, 1000].forEach((f, i) => toneAt(f, t + i * 0.03, 0.1, 'triangle', 0.08));
+      break;
+    case 'star': // star pickup — magical sparkly run
+      [n('C5'), n('E5'), n('G5'), n('C6'), n('E6'), n('G6')].forEach((f, i) => toneAt(f, t + i * 0.05, 0.16, 'square', 0.09));
+      break;
+    case 'lap': // cross the line — pleasant chime
+      toneAt(n('G5'), t, 0.12, 'square', 0.12);
+      toneAt(n('C6'), t + 0.1, 0.22, 'square', 0.12);
+      toneAt(n('E6'), t + 0.1, 0.2, 'sine', 0.04);
+      break;
+    case 'finallap': // final lap — urgent alarm then a rising call
+      [988, 784, 988, 784].forEach((f, i) => toneAt(f, t + i * 0.12, 0.12, 'square', 0.14));
+      [659, 880, 1047, 1319].forEach((f, i) => toneAt(f, t + 0.52 + i * 0.09, 0.26, 'square', 0.16));
+      break;
+    case 'coin': // collect a coin — the classic two-note, with a sparkle tail
+      toneAt(988, t, 0.06, 'square', 0.12);
+      toneAt(1319, t + 0.05, 0.16, 'square', 0.12);
+      toneAt(2637, t + 0.05, 0.12, 'sine', 0.03);
+      break;
+    case 'zap': // lightning — electric crackle + descending zap
+      noiseAt(t, 0.18, 0.15, 'bandpass', 3000, 800, 6);
+      sweepAt(1700, 200, t, 0.2, 'sawtooth', 0.13);
+      [1320, 660, 990].forEach((f, i) => toneAt(f, t + i * 0.04, 0.05, 'sawtooth', 0.10));
+      break;
+    case 'finish': // cross the finish — bright resolved fanfare
+      [523, 659, 784, 1047].forEach((f, i) => toneAt(f, t + i * 0.1, 0.3, 'square', 0.15));
+      chordAt([523, 659, 784, 1047], t + 0.42, 0.55, 'square', 0.09);
+      break;
+    case 'fanfare': // ceremony — a grand cadence with a sparkle on top
+      chordAt([n('C4'), n('E4'), n('G4')], t, 0.3, 'square', 0.09);
+      chordAt([n('F4'), n('A4'), n('C5')], t + 0.3, 0.3, 'square', 0.09);
+      chordAt([n('G4'), n('B4'), n('D5')], t + 0.6, 0.3, 'square', 0.09);
+      chordAt([n('C5'), n('E5'), n('G5'), n('C6')], t + 0.9, 0.8, 'square', 0.11);
+      [n('C6'), n('E6'), n('G6')].forEach((f, i) => toneAt(f, t + 0.95 + i * 0.07, 0.4, 'sine', 0.04));
+      break;
     default: break;
   }
 }
