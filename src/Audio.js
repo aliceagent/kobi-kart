@@ -118,18 +118,21 @@ function rep(pattern, times) {
 }
 
 // --- low-level synths -------------------------------------------------------
-function toneAt(freq, at, dur, type, gain) {
+// `dest` lets a voice route through its own filter (defaults to the mix bus);
+// `detune` (cents) lets layered unisons fatten the melody.
+function toneAt(freq, at, dur, type, gain, dest, detune) {
   const c = ctx;
   try {
     const osc = c.createOscillator();
     const g = c.createGain();
     osc.type = type;
     osc.frequency.value = freq;
+    if (detune) osc.detune.value = detune;
     g.gain.setValueAtTime(0.0001, at);
     g.gain.exponentialRampToValueAtTime(gain, at + 0.01);
     g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
     osc.connect(g);
-    g.connect(master);
+    g.connect(dest || master);
     osc.start(at);
     osc.stop(at + dur + 0.02);
   } catch (e) { /* ignore */ }
@@ -148,6 +151,20 @@ function drumAt(kind, at, gain) {
       g.gain.exponentialRampToValueAtTime(0.0001, at + 0.14);
       osc.connect(g); g.connect(master);
       osc.start(at); osc.stop(at + 0.16);
+    } else if (kind === 'h') {
+      // Hi-hat: a very short, bright high-passed noise tick for groove.
+      const len = Math.floor(c.sampleRate * 0.03);
+      const buf = c.createBuffer(1, len, c.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < len; i += 1) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+      const src = c.createBufferSource();
+      src.buffer = buf;
+      const hp = c.createBiquadFilter();
+      hp.type = 'highpass'; hp.frequency.value = 7500;
+      const g = c.createGain();
+      g.gain.value = gain;
+      src.connect(hp); hp.connect(g); g.connect(master);
+      src.start(at);
     } else {
       const len = Math.floor(c.sampleRate * 0.09);
       const buf = c.createBuffer(1, len, c.sampleRate);
@@ -656,6 +673,7 @@ const TRACKS = {
 // --- sequencer --------------------------------------------------------------
 let schedTimer = null;
 let voices = [];
+let musicNodes = []; // persistent per-track tone-shaping filters (disconnected on stop)
 let tempoMul = 1; // >1 speeds the music up (final-lap intensity)
 const LOOKAHEAD = 0.12;
 const TICK = 25;
@@ -675,7 +693,7 @@ function scheduleTick() {
       const dur = (beats * v.spb) / tempoMul;
       if (note) {
         if (v.drum) drumAt(note, v.nextTime, v.gain);
-        else toneAt(noteFreq(note), v.nextTime, dur * v.staccato, v.type, v.gain);
+        else toneAt(noteFreq(note) * (v.mul || 1), v.nextTime, dur * v.staccato, v.type, v.gain, v.dest, v.detune);
       }
       v.nextTime += dur;
       v.idx = (v.idx + 1) % v.seq.length;
@@ -693,15 +711,42 @@ export function startMusic(themeName) {
   tempoMul = 1; // reset any final-lap speed-up from the previous race
   const t0 = c.currentTime + 0.15;
   voices = [];
-  voices.push({ seq: track.melody, idx: 0, nextTime: t0, spb, type: track.wave, staccato: track.staccato, gain: 0.085 });
-  voices.push({ seq: track.bass, idx: 0, nextTime: t0, spb, type: track.bassWave, staccato: 0.95, gain: 0.06 });
-  if (track.drum) voices.push({ seq: track.drum, idx: 0, nextTime: t0, spb, drum: true, gain: 0.07 });
+
+  // Per-voice tone-shaping filters (created once per track, reused for its
+  // life): a gentle low-pass softens the fizz of square/saw leads, and a
+  // rounder one warms the bass. They feed the mix bus.
+  let melDest = master;
+  let bassDest = master;
+  musicNodes = [];
+  try {
+    const melLP = c.createBiquadFilter();
+    melLP.type = 'lowpass'; melLP.frequency.value = 3800; melLP.Q.value = 0.6;
+    melLP.connect(master);
+    melDest = melLP;
+    const bassLP = c.createBiquadFilter();
+    bassLP.type = 'lowpass'; bassLP.frequency.value = 1500; bassLP.Q.value = 0.5;
+    bassLP.connect(master);
+    bassDest = bassLP;
+    musicNodes = [melLP, bassLP];
+  } catch (e) { /* filters optional — voices fall back to the bus */ }
+
+  // Melody: a main voice plus a slightly detuned unison for body (chorus fatness).
+  voices.push({ seq: track.melody, idx: 0, nextTime: t0, spb, type: track.wave, staccato: track.staccato, gain: 0.072, dest: melDest });
+  voices.push({ seq: track.melody, idx: 0, nextTime: t0, spb, type: track.wave, staccato: track.staccato, gain: 0.044, dest: melDest, detune: 9 });
+  voices.push({ seq: track.bass, idx: 0, nextTime: t0, spb, type: track.bassWave, staccato: 0.95, gain: 0.06, dest: bassDest });
+  if (track.drum) {
+    voices.push({ seq: track.drum, idx: 0, nextTime: t0, spb, drum: true, gain: 0.07 });
+    // A steady eighth-note hi-hat adds groove (skipped on ambient drumless tracks).
+    voices.push({ seq: [['h', 0.5]], idx: 0, nextTime: t0, spb, drum: true, gain: 0.024 });
+  }
   schedTimer = setInterval(scheduleTick, TICK);
 }
 
 export function stopMusic() {
   if (schedTimer) { clearInterval(schedTimer); schedTimer = null; }
   voices = [];
+  for (const node of musicNodes) { try { node.disconnect(); } catch (e) { /* ignore */ } }
+  musicNodes = [];
 }
 
 // --- engine drone (continuous, one per human kart) --------------------------
