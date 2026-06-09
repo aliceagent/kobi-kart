@@ -98,6 +98,10 @@ export default class Kart {
     this.airVY = 0;
     this.jumpCd = 0; // cooldown so a ramp can't re-fire mid-landing
     this.justLanded = false; // set the frame the kart touches down (scene reads it)
+    // Air tricks: tap steer mid-jump to spin for a boost on a clean landing.
+    this.tricking = false;
+    this.trickDir = 0;
+    this.trickAngle = 0; // extra spin added to the sprite while airborne
     this.heldItem = null;
     this.heldCount = 0; // ammo for triple-mushroom
     this.orbitShells = 0; // orbiting green shells (triple-shell)
@@ -171,6 +175,10 @@ export default class Kart {
     this.airVY = vy;
     this.heading = Math.atan2(vy, vx);
     this.jumpCd = dur + 0.45;
+    // Fresh trick state for this jump.
+    this.tricking = false;
+    this.trickDir = 0;
+    this.trickAngle = 0;
     // No drift carry through a jump.
     this.drifting = false;
     this.driftDir = 0;
@@ -234,7 +242,7 @@ export default class Kart {
       this.vy = this.airVY;
       this.x += this.vx * dt;
       this.y += this.vy * dt;
-      this.sprite.rotation = this.heading;
+      this.sprite.rotation = this.heading + this.trickAngle; // trickAngle spins it mid-air
       this.knockX *= decay;
       this.knockY *= decay;
       this.boosting = false;

@@ -981,6 +981,18 @@ export default class RaceScene extends Phaser.Scene {
     });
   }
 
+  trickPopup(kart) {
+    const t = this.add.text(kart.x, kart.y - 28, 'TRICK!', {
+      fontFamily: 'monospace', fontSize: '26px', color: '#ffe14d', fontStyle: 'bold',
+      stroke: '#7a3bbf', strokeThickness: 6,
+    }).setOrigin(0.5).setDepth(40);
+    this.tweens.add({
+      targets: t, y: t.y - 56, alpha: { from: 1, to: 0 }, scale: { from: 0.6, to: 1.25 },
+      angle: { from: -12, to: 12 },
+      duration: 900, ease: 'Cubic.Out', onComplete: () => t.destroy(),
+    });
+  }
+
   applyRubberBand() {
     // Lead = furthest progressed racer. The AI's base pace comes from the
     // chosen difficulty; trailing AI catch up by the difficulty's band amount.
@@ -1250,6 +1262,17 @@ export default class RaceScene extends Phaser.Scene {
     g.strokePath();
   }
 
+  // While airborne off a ramp, a steer tap starts a spin that keeps turning
+  // until landing. A spin carried far enough is rewarded as a "TRICK!".
+  updateTrick(kart, steer, dt) {
+    if (kart.airTimer <= 0) return;
+    if (!kart.tricking && Math.abs(steer) > 0.5) {
+      kart.tricking = true;
+      kart.trickDir = steer < 0 ? -1 : 1;
+    }
+    if (kart.tricking) kart.trickAngle += kart.trickDir * 17 * dt;
+  }
+
   driveRacer(kart, dt, finishedMode) {
     if (kart.falling) return; // tumbling through space — no control
     let input;
@@ -1278,6 +1301,9 @@ export default class RaceScene extends Phaser.Scene {
     }
     // AI uses items shortly after grabbing one.
     if (kart.isAI && kart.heldItem && !kart.spunOut && Math.random() < this.aiCfg.itemChance) this.useItem(kart);
+
+    // Air tricks (human only): tap steer mid-jump to spin for a landing boost.
+    if (!kart.isAI && !kart.finished) this.updateTrick(kart, input.steer, dt);
 
     const onRoad = this.isOnRoad(kart.x, kart.y);
     kart.drive(dt, input.steer, input.braking, input.boosting, onRoad, this.terrainFor(kart, onRoad));
@@ -1327,9 +1353,18 @@ export default class RaceScene extends Phaser.Scene {
     // Just touched down from a ramp jump: a dusty thump + a little speed reward.
     if (kart.justLanded) {
       kart.justLanded = false;
-      kart.padBoostTimer = Math.max(kart.padBoostTimer, 0.3);
-      this.burst(kart.x, kart.y, 0xbfa06a);
-      if (!kart.isAI) Audio.sfx('land');
+      // A spin carried most of the way round = a landed trick → bigger reward.
+      const trickDone = kart.tricking && Math.abs(kart.trickAngle) >= Math.PI * 1.5;
+      kart.tricking = false; kart.trickDir = 0; kart.trickAngle = 0;
+      if (trickDone) {
+        kart.padBoostTimer = Math.max(kart.padBoostTimer, 0.7);
+        this.burst(kart.x, kart.y, 0xffe14d);
+        if (!kart.isAI) { this.trickPopup(kart); Audio.sfx('trick'); }
+      } else {
+        kart.padBoostTimer = Math.max(kart.padBoostTimer, 0.3);
+        this.burst(kart.x, kart.y, 0xbfa06a);
+        if (!kart.isAI) Audio.sfx('land');
+      }
     }
     if (kart.finished || kart.falling || kart.spunOut || kart.airTimer > 0) return;
     // Ramp: launch over the shortcut barrier if hit with speed, heading the

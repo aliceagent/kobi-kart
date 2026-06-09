@@ -304,6 +304,11 @@ export function sfx(name, opt) {
       sweepAt(300, 1500, t, 0.32, 'sine', 0.12);
       noiseAt(t, 0.3, 0.09, 'bandpass', 800, 3200, 1.5);
       break;
+    case 'trick': // landed an air-spin — a flashy sparkle flourish
+      sweepAt(500, 1500, t, 0.18, 'square', 0.11);
+      [n('G5'), n('C6'), n('E6'), n('G6')].forEach((f, i) => toneAt(f, t + i * 0.04, 0.14, 'square', 0.10));
+      noiseAt(t, 0.16, 0.07, 'highpass', 2500, 6000, 0.8);
+      break;
     case 'land': // touchdown — thud + a little chirp
       noiseAt(t, 0.1, 0.12, 'lowpass', 1300, 320, 1);
       toneAt(160, t, 0.1, 'sine', 0.10);
