@@ -81,18 +81,9 @@ export default class UIScene extends Phaser.Scene {
       stroke: '#000000', strokeThickness: 4,
     }).setOrigin(0.5, 0).setDepth(11);
 
-    // Pause overlay (shown when the race is paused).
-    const H = this.scale.height;
-    this.pauseDim = this.add.graphics().setDepth(30).setVisible(false);
-    this.pauseDim.fillStyle(0x000000, 0.6); this.pauseDim.fillRect(0, 0, W, H);
-    this.pauseTitle = this.add.text(W / 2, H / 2 - 30, 'PAUSED', {
-      fontFamily: 'monospace', fontSize: '64px', color: '#ffe14d', fontStyle: 'bold',
-      stroke: '#000000', strokeThickness: 8,
-    }).setOrigin(0.5).setDepth(31).setVisible(false);
-    this.pauseHint = this.add.text(W / 2, H / 2 + 34, 'P — resume     ·     Q / Esc — quit to menu', {
-      fontFamily: 'monospace', fontSize: '17px', color: '#ffffff', fontStyle: 'bold',
-      stroke: '#000000', strokeThickness: 4,
-    }).setOrigin(0.5).setDepth(31).setVisible(false);
+    // Pause overlay (shown when the race is paused) — a styled panel that
+    // matches the rest of the UI rather than bare text on a dim.
+    this.buildPauseOverlay(W, this.scale.height);
 
     // Neon: a dark vignette closing in around the action (reduced visibility).
     if (this.race && this.race.lowVis) this.addVignette();
@@ -163,6 +154,85 @@ export default class UIScene extends Phaser.Scene {
       g.fillStyle(r.color, r.finished ? 0.45 : 1); g.fillCircle(x, y, rad);
       if (human) { g.lineStyle(1.5, 0xffffff, 0.95); g.strokeCircle(x, y, rad); }
     }
+  }
+
+  // ----------------------------------------------------------- pause overlay --
+  buildPauseOverlay(W, H) {
+    const cx = W / 2;
+    const cy = H / 2;
+    const grp = this.add.container(0, 0).setDepth(30).setVisible(false);
+
+    // Dim the race behind the panel.
+    const dim = this.add.graphics();
+    dim.fillStyle(0x0a0a16, 0.62); dim.fillRect(0, 0, W, H);
+    grp.add(dim);
+
+    // Panel — same dark rounded card + white outline used across the UI.
+    const pw = 446;
+    const ph = 248;
+    const px = cx - pw / 2;
+    const py = cy - ph / 2;
+    const panel = this.add.graphics();
+    panel.fillStyle(0x000000, 0.35); panel.fillRoundedRect(px + 5, py + 8, pw, ph, 18); // shadow
+    panel.fillStyle(0x16162a, 0.96); panel.fillRoundedRect(px, py, pw, ph, 18);
+    panel.fillStyle(0xffe14d, 0.92); panel.fillRoundedRect(px, py, pw, 7, { tl: 18, tr: 18, bl: 0, br: 0 }); // accent bar
+    panel.lineStyle(3, 0xffffff, 0.5); panel.strokeRoundedRect(px, py, pw, ph, 18);
+    grp.add(panel);
+
+    // Pause glyph — a yellow disc with two bars.
+    const gy = py + 50;
+    const glyph = this.add.graphics();
+    glyph.fillStyle(0x000000, 0.3); glyph.fillCircle(cx, gy + 2, 23);
+    glyph.fillStyle(0xffe14d, 1); glyph.fillCircle(cx, gy, 22);
+    glyph.fillStyle(0xfff3a0, 1); glyph.fillCircle(cx - 6, gy - 6, 7);
+    glyph.fillStyle(0x16162a, 1);
+    glyph.fillRoundedRect(cx - 9, gy - 9, 6, 18, 2);
+    glyph.fillRoundedRect(cx + 3, gy - 9, 6, 18, 2);
+    grp.add(glyph);
+
+    // Title.
+    const title = this.add.text(cx, py + 104, 'PAUSED', {
+      fontFamily: 'monospace', fontSize: '50px', color: '#ffe14d', fontStyle: 'bold',
+      stroke: '#000000', strokeThickness: 7,
+    }).setOrigin(0.5);
+    grp.add(title);
+    this.tweens.add({ targets: title, scale: { from: 1, to: 1.04 }, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+
+    // Key-prompt rows.
+    this.buildPauseRow(grp, py + 156, ['P'], 'RESUME RACE');
+    this.buildPauseRow(grp, py + 200, ['Q', 'ESC'], 'QUIT TO MENU');
+
+    this.pauseGroup = grp;
+  }
+
+  // A centred row: one or more keycaps followed by a label.
+  buildPauseRow(parent, y, keys, label) {
+    const gap = 7;
+    const kw = keys.map((k) => Math.max(30, 13 + k.length * 12));
+    const labelText = this.add.text(0, y, label, {
+      fontFamily: 'monospace', fontSize: '17px', color: '#ffffff', fontStyle: 'bold',
+      stroke: '#000000', strokeThickness: 3,
+    }).setOrigin(0, 0.5);
+    const total = kw.reduce((a, b) => a + b + gap, 0) + 8 + labelText.width;
+    let x = this.scale.width / 2 - total / 2;
+    keys.forEach((k, i) => { this.makeKeycap(parent, x + kw[i] / 2, y, k); x += kw[i] + gap; });
+    labelText.setX(x + 8);
+    parent.add(labelText);
+  }
+
+  makeKeycap(parent, cx, cy, label) {
+    const w = Math.max(30, 13 + label.length * 12);
+    const h = 30;
+    const g = this.add.graphics();
+    g.fillStyle(0x000000, 0.4); g.fillRoundedRect(cx - w / 2, cy - h / 2 + 2, w, h, 6); // base shadow
+    g.fillStyle(0x2c2c4a, 1); g.fillRoundedRect(cx - w / 2, cy - h / 2, w, h, 6);
+    g.fillStyle(0xffffff, 0.13); g.fillRoundedRect(cx - w / 2 + 2, cy - h / 2 + 2, w - 4, 9, 4); // top sheen
+    g.lineStyle(2, 0xffffff, 0.85); g.strokeRoundedRect(cx - w / 2, cy - h / 2, w, h, 6);
+    const t = this.add.text(cx, cy - 1, label, {
+      fontFamily: 'monospace', fontSize: '15px', color: '#ffe14d', fontStyle: 'bold',
+    }).setOrigin(0.5);
+    parent.add(g);
+    parent.add(t);
   }
 
   addVignette() {
@@ -281,9 +351,7 @@ export default class UIScene extends Phaser.Scene {
     const race = this.race;
     if (!race || !race.scene || !race.racers) return;
     const paused = !!race.paused;
-    this.pauseDim.setVisible(paused);
-    this.pauseTitle.setVisible(paused);
-    this.pauseHint.setVisible(paused);
+    if (this.pauseGroup) this.pauseGroup.setVisible(paused);
     this.gfx.clear();
     this.drawMinimapDots();
     const W = this.scale.width;
