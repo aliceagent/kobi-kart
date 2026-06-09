@@ -703,3 +703,67 @@ export function stopMusic() {
   if (schedTimer) { clearInterval(schedTimer); schedTimer = null; }
   voices = [];
 }
+
+// --- engine drone (continuous, one per human kart) --------------------------
+// A small motor made of a sawtooth + a sub-octave square through a resonant
+// low-pass. Pitch, brightness and volume track the kart's speed and boost, so
+// racing actually sounds like driving. Nodes are created once per kart and
+// reused — updateEngine only nudges AudioParams (cheap, click-free).
+const engines = {};
+
+export function startEngine(id) {
+  if (!enabled) return;
+  const c = ensure();
+  if (!c || engines[id]) return;
+  try {
+    const osc = c.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.value = 64;
+    const sub = c.createOscillator();
+    sub.type = 'square';
+    sub.frequency.value = 32;
+    const filter = c.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 460;
+    filter.Q.value = 4.5; // a touch of resonance → a motor-ish growl
+    const gain = c.createGain();
+    gain.gain.value = 0.0001; // silent until updateEngine fades it in
+    osc.connect(filter); sub.connect(filter); filter.connect(gain); gain.connect(master);
+    osc.start(); sub.start();
+    engines[id] = { osc, sub, filter, gain };
+  } catch (e) { /* ignore */ }
+}
+
+// speedFrac: kart speed / top speed (0 = idle, can exceed 1 on boost).
+// boosting: brighter + higher when true.
+export function updateEngine(id, speedFrac, boosting) {
+  const e = engines[id];
+  if (!e || !ctx) return;
+  try {
+    const now = ctx.currentTime;
+    const sf = Math.max(0, Math.min(1.3, speedFrac || 0));
+    const b = boosting ? 1 : 0;
+    const base = 60 + sf * 120 + b * 36; // idle ~60Hz → ~190Hz, boost lifts it
+    e.osc.frequency.setTargetAtTime(base, now, 0.08);
+    e.sub.frequency.setTargetAtTime(base * 0.5, now, 0.08);
+    e.filter.frequency.setTargetAtTime(420 + sf * 1700 + b * 900, now, 0.1);
+    const vol = 0.012 + sf * 0.05 + b * 0.02; // subtle — sits under the music
+    e.gain.gain.setTargetAtTime(vol, now, 0.1);
+  } catch (e2) { /* ignore */ }
+}
+
+export function stopEngine(id) {
+  const e = engines[id];
+  if (!e) return;
+  delete engines[id];
+  try {
+    const now = ctx ? ctx.currentTime : 0;
+    e.gain.gain.setTargetAtTime(0.0001, now, 0.07); // quick fade to avoid a click
+    const { osc, sub } = e;
+    setTimeout(() => { try { osc.stop(); sub.stop(); } catch (x) { /* ignore */ } }, 280);
+  } catch (e2) { /* ignore */ }
+}
+
+export function stopAllEngines() {
+  for (const id of Object.keys(engines)) stopEngine(id);
+}

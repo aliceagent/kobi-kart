@@ -142,7 +142,15 @@ export default class RaceScene extends Phaser.Scene {
     this.events.once('shutdown', () => {
       this.scene.stop('UIScene');
       Audio.stopMusic();
+      Audio.stopAllEngines();
     });
+
+    // Continuous engine drone for each human kart (none in the attract demo).
+    this.engineOn = false;
+    if (!this.attract) {
+      this.humans.forEach((h) => Audio.startEngine(h.id));
+      this.engineOn = true;
+    }
 
     this.paused = false;
     if (this.attract) {
@@ -986,8 +994,22 @@ export default class RaceScene extends Phaser.Scene {
     }
   }
 
+  // Engine drone follows each human kart's speed + boost. Runs every frame
+  // (even when paused, where it idles to silence) so it never drones on a
+  // frozen game.
+  updateEngines(paused) {
+    if (!this.engineOn) return;
+    for (const h of this.humans) {
+      if (paused) { Audio.updateEngine(h.id, 0, false); continue; }
+      const sf = Math.max(0, h.speed) / TUNE.maxSpeed;
+      const boosting = h.boosting || h.itemBoostTimer > 0 || h.padBoostTimer > 0;
+      Audio.updateEngine(h.id, sf, boosting);
+    }
+  }
+
   // ----------------------------------------------------------- update --------
   update(time, deltaMs) {
+    this.updateEngines(this.paused);
     if (this.paused) return; // frozen until P resumes
     const dt = Math.min(deltaMs, 50) / 1000;
     this.elapsed += dt;
