@@ -156,6 +156,19 @@ export default class UIScene extends Phaser.Scene {
     }
   }
 
+  // A "PHOTO FINISH!" banner (driven by RaceScene during the slow-mo beat).
+  showPhotoFinish() {
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const t = this.add.text(W / 2, H * 0.32, 'PHOTO FINISH!', {
+      fontFamily: 'monospace', fontSize: '40px', color: '#ffe14d', fontStyle: 'bold',
+      stroke: '#c0392b', strokeThickness: 8,
+    }).setOrigin(0.5).setDepth(40);
+    t.setScale(0.4);
+    this.tweens.add({ targets: t, scale: 1, duration: 350, ease: 'Back.Out' });
+    this.tweens.add({ targets: t, alpha: 0, delay: 1500, duration: 500, onComplete: () => t.destroy() });
+  }
+
   // ----------------------------------------------------------- pause overlay --
   buildPauseOverlay(W, H) {
     const cx = W / 2;

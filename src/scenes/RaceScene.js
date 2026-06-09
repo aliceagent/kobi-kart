@@ -126,6 +126,8 @@ export default class RaceScene extends Phaser.Scene {
     fadeIn(this);
 
     this.state = 'countdown';
+    this.timeScale = 1; // 1 = normal; dipped for the photo-finish slow-mo
+    this.photoFinishDone = false;
     this.countdown = 3.999;
     this.countdownText = '';
     this.elapsed = 0;
@@ -418,15 +420,34 @@ export default class RaceScene extends Phaser.Scene {
   finishRacer(kart) {
     if (kart.finished) return;
     kart.finished = true;
+    kart.finishTime = this.raceElapsed;
     this.finishCount += 1;
     kart.place = this.finishCount;
     if (!kart.isAI) Audio.sfx('finish');
     this.celebrateCrossing(kart, true);
+    // Photo finish: 2nd crosses right on the leader's tail, with a human in the
+    // mix → a brief slow-mo flourish. (Skipped in the attract demo.)
+    if (this.finishCount === 2 && !this.attract && !this.photoFinishDone) {
+      const first = this.racers.find((r) => r.place === 1);
+      const gap = first ? kart.finishTime - first.finishTime : 99;
+      if (gap <= 0.7 && (!first.isAI || !kart.isAI)) this.startPhotoFinish();
+    }
     // Once everyone but the last racer is in, give that straggler 60s to finish.
     const unfinished = this.racers.reduce((c, r) => c + (r.finished ? 0 : 1), 0);
     if (unfinished === 1 && this.stragglerDeadline === null) {
       this.stragglerDeadline = this.raceElapsed + STRAGGLER_GRACE;
     }
+  }
+
+  // A dramatic slow-motion beat + banner when the top two finish nearly level.
+  startPhotoFinish() {
+    this.photoFinishDone = true;
+    this.timeScale = 0.28;
+    this.tweens.add({ targets: this, timeScale: 1, duration: 1500, ease: 'Cubic.In' });
+    this.cameras.main.flash(180, 255, 255, 255);
+    // Banner lives on the unzoomed HUD overlay (the race camera is zoomed).
+    const ui = this.scene.get('UIScene');
+    if (ui && ui.showPhotoFinish) ui.showPhotoFinish();
   }
 
   endRace() {
@@ -1023,7 +1044,8 @@ export default class RaceScene extends Phaser.Scene {
   update(time, deltaMs) {
     this.updateEngines(this.paused);
     if (this.paused) return; // frozen until P resumes
-    const dt = Math.min(deltaMs, 50) / 1000;
+    // timeScale < 1 = slow motion (used for the photo-finish flourish).
+    const dt = (Math.min(deltaMs, 50) / 1000) * this.timeScale;
     this.elapsed += dt;
 
     if (this.state === 'countdown') {
