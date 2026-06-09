@@ -8,6 +8,7 @@ import TutorialScene from './scenes/TutorialScene.js';
 import CharacterSelectScene from './scenes/CharacterSelectScene.js';
 import CupSelectScene from './scenes/CupSelectScene.js';
 import RaceScene from './scenes/RaceScene.js';
+import BattleScene from './scenes/BattleScene.js';
 import UIScene from './scenes/UIScene.js';
 import ResultsScene from './scenes/ResultsScene.js';
 import CeremonyScene from './scenes/CeremonyScene.js';
@@ -50,7 +51,7 @@ const config = {
   parent: 'game',
   backgroundColor: '#0e0e16',
   pixelArt: false,
-  scene: [BootScene, TitleScene, SettingsScene, TutorialScene, CupSelectScene, CharacterSelectScene, RaceScene, UIScene, ResultsScene, CeremonyScene],
+  scene: [BootScene, TitleScene, SettingsScene, TutorialScene, CupSelectScene, CharacterSelectScene, RaceScene, BattleScene, UIScene, ResultsScene, CeremonyScene],
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,

@@ -55,12 +55,13 @@ export default class TitleScene extends Phaser.Scene {
         stroke: '#11364f', strokeThickness: 4,
       }).setOrigin(0.5).setDepth(20);
 
-    this.makeButton(W / 2, H * 0.43, '1 PLAYER', 0xff4d4d, () => this.startGame(1), { h: 52 });
-    this.makeButton(W / 2, H * 0.54, '2 PLAYERS', 0x4d8bff, () => this.startGame(2), { h: 52 });
+    this.makeButton(W / 2, H * 0.40, '1 PLAYER', 0xff4d4d, () => this.startGame(1), { h: 50 });
+    this.makeButton(W / 2, H * 0.50, '2 PLAYERS', 0x4d8bff, () => this.startGame(2), { h: 50 });
+    this.makeButton(W / 2, H * 0.60, '⚔ BATTLE', 0xff8a2c, () => this.startBattle(), { h: 50 });
 
-    this.makeButton(W / 2 - 162, H * 0.645, 'HOW TO PLAY', 0x2fa86a,
+    this.makeButton(W / 2 - 162, H * 0.70, 'HOW TO PLAY', 0x2fa86a,
       () => transitionTo(this, 'TutorialScene'), { w: 300, h: 44, fontSize: 18 });
-    this.makeButton(W / 2 + 162, H * 0.645, 'SETTINGS', 0x9b6bce,
+    this.makeButton(W / 2 + 162, H * 0.70, 'SETTINGS', 0x9b6bce,
       () => transitionTo(this, 'SettingsScene'), { w: 300, h: 44, fontSize: 20 });
 
     // Controls — one labelled line per player so every key is clear. A dark
@@ -513,6 +514,12 @@ export default class TitleScene extends Phaser.Scene {
   startGame(count) {
     Audio.resumeAudio();
     transitionTo(this, 'CupSelectScene', { playerCount: count });
+  }
+
+  startBattle() {
+    Audio.resumeAudio();
+    // Couch battle: two players pick karts, then fight 2 AI in the arena.
+    transitionTo(this, 'CharacterSelectScene', { mode: 'battle', playerCount: 2 });
   }
 
   // Kick off a self-running, all-CPU demo race (one random world, hard AI).
