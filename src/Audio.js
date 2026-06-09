@@ -13,10 +13,26 @@
 // Everything is wrapped in try/catch so audio can never break gameplay.
 
 let ctx = null;
-let master = null;
+let master = null;     // mix bus (unity gain) — every voice and SFX connects here
+let masterOut = null;  // final stage: master volume + mute
 let enabled = true;
 let muted = false;
 const VOLUME = 0.45;
+
+// A simple decaying-noise impulse response for the reverb convolver. Stereo, so
+// the tail spreads a little width across the speakers.
+function makeImpulse(c, seconds, decay) {
+  const rate = c.sampleRate;
+  const len = Math.max(1, Math.floor(rate * seconds));
+  const buf = c.createBuffer(2, len, rate);
+  for (let ch = 0; ch < 2; ch += 1) {
+    const d = buf.getChannelData(ch);
+    for (let i = 0; i < len; i += 1) {
+      d[i] = (Math.random() * 2 - 1) * (1 - i / len) ** decay;
+    }
+  }
+  return buf;
+}
 
 function ensure() {
   if (ctx) return ctx;
@@ -24,9 +40,42 @@ function ensure() {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) { enabled = false; return null; }
     ctx = new AC();
+
+    // Final output stage carries the master volume + mute.
+    masterOut = ctx.createGain();
+    masterOut.gain.value = muted ? 0 : VOLUME;
+    masterOut.connect(ctx.destination);
+
+    // A gentle bus compressor glues the mix together and tames peaks when many
+    // sounds stack (countdown + boost + shells + music all at once).
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -15;
+    comp.knee.value = 26;
+    comp.ratio.value = 3.2;
+    comp.attack.value = 0.004;
+    comp.release.value = 0.2;
+    comp.connect(masterOut);
+
+    // The mix bus everything plays into (toneAt / drumAt connect to `master`).
     master = ctx.createGain();
-    master.gain.value = muted ? 0 : VOLUME;
-    master.connect(ctx.destination);
+    master.gain.value = 1;
+    master.connect(comp);
+
+    // A short, high-passed reverb send adds a sense of space and glues the
+    // chiptune without muddying the low end (bass/kick stay tight).
+    try {
+      const conv = ctx.createConvolver();
+      conv.buffer = makeImpulse(ctx, 1.1, 2.6);
+      const revHP = ctx.createBiquadFilter();
+      revHP.type = 'highpass';
+      revHP.frequency.value = 480;
+      const revSend = ctx.createGain();
+      revSend.gain.value = 0.14;
+      master.connect(revSend);
+      revSend.connect(revHP);
+      revHP.connect(conv);
+      conv.connect(comp);
+    } catch (e) { /* reverb is optional — the dry mix still plays */ }
   } catch (e) {
     enabled = false;
   }
@@ -44,7 +93,7 @@ export function isMuted() {
 
 export function toggleMute() {
   muted = !muted;
-  if (master) master.gain.value = muted ? 0 : VOLUME;
+  if (masterOut) masterOut.gain.value = muted ? 0 : VOLUME;
   return muted;
 }
 
