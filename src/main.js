@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { ROSTER } from './GrandPrix.js';
 import { makeKartTexture, makeGameTextures } from './textures.js';
+import * as Audio from './Audio.js';
 import TitleScene from './scenes/TitleScene.js';
 import SettingsScene from './scenes/SettingsScene.js';
 import TutorialScene from './scenes/TutorialScene.js';
@@ -33,6 +34,11 @@ class BootScene extends Phaser.Scene {
       if (sp === 'slow' || sp === 'medium' || sp === 'fast') speed = sp;
     } catch (e) { /* ignore */ }
     this.registry.set('carSpeed', speed);
+    // Seed the saved master volume (0..1; defaults to 0.75).
+    try {
+      const v = parseFloat(window.localStorage.getItem('kobikart.volume'));
+      if (v >= 0 && v <= 1) Audio.setVolume(v);
+    } catch (e) { /* ignore */ }
     this.scene.start('TitleScene');
   }
 }

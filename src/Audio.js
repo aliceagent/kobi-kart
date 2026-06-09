@@ -15,9 +15,13 @@
 let ctx = null;
 let master = null;     // mix bus (unity gain) — every voice and SFX connects here
 let masterOut = null;  // final stage: master volume + mute
+let musicBus = null;   // music submix → master, so big SFX can briefly duck it
 let enabled = true;
 let muted = false;
-const VOLUME = 0.45;
+const MAX_GAIN = 0.6;  // masterOut gain at 100% volume
+let volFrac = 0.75;    // user volume 0..1 (default → 0.45 gain, the original level)
+
+function outGain() { return muted ? 0 : volFrac * MAX_GAIN; }
 
 // A simple decaying-noise impulse response for the reverb convolver. Stereo, so
 // the tail spreads a little width across the speakers.
@@ -43,7 +47,7 @@ function ensure() {
 
     // Final output stage carries the master volume + mute.
     masterOut = ctx.createGain();
-    masterOut.gain.value = muted ? 0 : VOLUME;
+    masterOut.gain.value = outGain();
     masterOut.connect(ctx.destination);
 
     // A gentle bus compressor glues the mix together and tames peaks when many
@@ -60,6 +64,12 @@ function ensure() {
     master = ctx.createGain();
     master.gain.value = 1;
     master.connect(comp);
+
+    // Music submix: the music routes through here so a big SFX can briefly dip
+    // it (duckMusic) and punch through. SFX + engine stay on the dry `master`.
+    musicBus = ctx.createGain();
+    musicBus.gain.value = 1;
+    musicBus.connect(master);
 
     // A short, high-passed reverb send adds a sense of space and glues the
     // chiptune without muddying the low end (bass/kick stay tight).
@@ -93,8 +103,29 @@ export function isMuted() {
 
 export function toggleMute() {
   muted = !muted;
-  if (masterOut) masterOut.gain.value = muted ? 0 : VOLUME;
+  if (masterOut) masterOut.gain.value = outGain();
   return muted;
+}
+
+export function getVolume() { return volFrac; }
+
+export function setVolume(frac) {
+  volFrac = Math.max(0, Math.min(1, frac || 0));
+  if (masterOut && !muted) masterOut.gain.value = outGain();
+  try { window.localStorage.setItem('kobikart.volume', String(volFrac)); } catch (e) { /* ignore */ }
+}
+
+// Briefly dip the music so a big SFX punches through, then recover.
+export function duckMusic(amount = 0.5, dur = 0.5) {
+  if (!musicBus || !ctx) return;
+  try {
+    const now = ctx.currentTime;
+    const lo = Math.max(0, 1 - amount);
+    musicBus.gain.cancelScheduledValues(now);
+    musicBus.gain.setValueAtTime(musicBus.gain.value, now);
+    musicBus.gain.linearRampToValueAtTime(lo, now + 0.03); // quick dip
+    musicBus.gain.linearRampToValueAtTime(1, now + dur);   // ease back up
+  } catch (e) { /* ignore */ }
 }
 
 // --- note helpers -----------------------------------------------------------
@@ -138,8 +169,9 @@ function toneAt(freq, at, dur, type, gain, dest, detune) {
   } catch (e) { /* ignore */ }
 }
 
-function drumAt(kind, at, gain) {
+function drumAt(kind, at, gain, dest) {
   const c = ctx;
+  const out = dest || master;
   try {
     if (kind === 'k') {
       const osc = c.createOscillator();
@@ -149,7 +181,7 @@ function drumAt(kind, at, gain) {
       osc.frequency.exponentialRampToValueAtTime(45, at + 0.12);
       g.gain.setValueAtTime(gain, at);
       g.gain.exponentialRampToValueAtTime(0.0001, at + 0.14);
-      osc.connect(g); g.connect(master);
+      osc.connect(g); g.connect(out);
       osc.start(at); osc.stop(at + 0.16);
     } else if (kind === 'h') {
       // Hi-hat: a very short, bright high-passed noise tick for groove.
@@ -163,7 +195,7 @@ function drumAt(kind, at, gain) {
       hp.type = 'highpass'; hp.frequency.value = 7500;
       const g = c.createGain();
       g.gain.value = gain;
-      src.connect(hp); hp.connect(g); g.connect(master);
+      src.connect(hp); hp.connect(g); g.connect(out);
       src.start(at);
     } else {
       const len = Math.floor(c.sampleRate * 0.09);
@@ -174,7 +206,7 @@ function drumAt(kind, at, gain) {
       src.buffer = buf;
       const g = c.createGain();
       g.gain.value = gain * 0.6;
-      src.connect(g); g.connect(master);
+      src.connect(g); g.connect(out);
       src.start(at);
     }
   } catch (e) { /* ignore */ }
@@ -282,6 +314,7 @@ export function sfx(name, opt) {
       sweepAt(820, 380, t + 0.08, 0.14, 'sine', 0.10);
       break;
     case 'hit': // spun out — punchy impact
+      duckMusic(0.28, 0.35);
       noiseAt(t, 0.18, 0.18, 'lowpass', 1900, 280, 1);
       sweepAt(260, 70, t, 0.22, 'sawtooth', 0.15);
       drumAt('k', t, 0.12);
@@ -315,6 +348,7 @@ export function sfx(name, opt) {
       toneAt(n('E6'), t + 0.1, 0.2, 'sine', 0.04);
       break;
     case 'finallap': // final lap — urgent alarm then a rising call
+      duckMusic(0.4, 0.9);
       [988, 784, 988, 784].forEach((f, i) => toneAt(f, t + i * 0.12, 0.12, 'square', 0.14));
       [659, 880, 1047, 1319].forEach((f, i) => toneAt(f, t + 0.52 + i * 0.09, 0.26, 'square', 0.16));
       break;
@@ -324,6 +358,7 @@ export function sfx(name, opt) {
       toneAt(2637, t + 0.05, 0.12, 'sine', 0.03);
       break;
     case 'zap': // lightning — electric crackle + descending zap
+      duckMusic(0.5, 0.6);
       noiseAt(t, 0.18, 0.15, 'bandpass', 3000, 800, 6);
       sweepAt(1700, 200, t, 0.2, 'sawtooth', 0.13);
       [1320, 660, 990].forEach((f, i) => toneAt(f, t + i * 0.04, 0.05, 'sawtooth', 0.10));
@@ -333,6 +368,7 @@ export function sfx(name, opt) {
       chordAt([523, 659, 784, 1047], t + 0.42, 0.55, 'square', 0.09);
       break;
     case 'fanfare': // ceremony — a grand cadence with a sparkle on top
+      duckMusic(0.5, 1.2);
       chordAt([n('C4'), n('E4'), n('G4')], t, 0.3, 'square', 0.09);
       chordAt([n('F4'), n('A4'), n('C5')], t + 0.3, 0.3, 'square', 0.09);
       chordAt([n('G4'), n('B4'), n('D5')], t + 0.6, 0.3, 'square', 0.09);
@@ -692,7 +728,7 @@ function scheduleTick() {
       const [note, beats] = v.seq[v.idx];
       const dur = (beats * v.spb) / tempoMul;
       if (note) {
-        if (v.drum) drumAt(note, v.nextTime, v.gain);
+        if (v.drum) drumAt(note, v.nextTime, v.gain, v.dest);
         else toneAt(noteFreq(note) * (v.mul || 1), v.nextTime, dur * v.staccato, v.type, v.gain, v.dest, v.detune);
       }
       v.nextTime += dur;
@@ -712,32 +748,48 @@ export function startMusic(themeName) {
   const t0 = c.currentTime + 0.15;
   voices = [];
 
+  // Everything in the music routes to the duckable music submix (falling back
+  // to the mix bus if the context predates it).
+  const mBus = musicBus || master;
+
   // Per-voice tone-shaping filters (created once per track, reused for its
   // life): a gentle low-pass softens the fizz of square/saw leads, and a
-  // rounder one warms the bass. They feed the mix bus.
-  let melDest = master;
-  let bassDest = master;
+  // rounder one warms the bass. The two melody layers are panned slightly
+  // L / R for width, while bass + drums stay centred.
+  let melMainDest = mBus;
+  let melDetuneDest = mBus;
+  let bassDest = mBus;
+  const drumDest = mBus;
   musicNodes = [];
   try {
     const melLP = c.createBiquadFilter();
     melLP.type = 'lowpass'; melLP.frequency.value = 3800; melLP.Q.value = 0.6;
-    melLP.connect(master);
-    melDest = melLP;
+    melLP.connect(mBus);
     const bassLP = c.createBiquadFilter();
     bassLP.type = 'lowpass'; bassLP.frequency.value = 1500; bassLP.Q.value = 0.5;
-    bassLP.connect(master);
+    bassLP.connect(mBus);
     bassDest = bassLP;
+    melMainDest = melLP;
+    melDetuneDest = melLP;
     musicNodes = [melLP, bassLP];
+    try {
+      const panL = c.createStereoPanner(); panL.pan.value = -0.28; panL.connect(melLP);
+      const panR = c.createStereoPanner(); panR.pan.value = 0.28; panR.connect(melLP);
+      melMainDest = panL;
+      melDetuneDest = panR;
+      musicNodes.push(panL, panR);
+    } catch (e) { /* no StereoPanner → mono melody, still fine */ }
   } catch (e) { /* filters optional — voices fall back to the bus */ }
 
-  // Melody: a main voice plus a slightly detuned unison for body (chorus fatness).
-  voices.push({ seq: track.melody, idx: 0, nextTime: t0, spb, type: track.wave, staccato: track.staccato, gain: 0.072, dest: melDest });
-  voices.push({ seq: track.melody, idx: 0, nextTime: t0, spb, type: track.wave, staccato: track.staccato, gain: 0.044, dest: melDest, detune: 9 });
+  // Melody: a main voice plus a slightly detuned unison for body (chorus
+  // fatness), the two spread L / R.
+  voices.push({ seq: track.melody, idx: 0, nextTime: t0, spb, type: track.wave, staccato: track.staccato, gain: 0.072, dest: melMainDest });
+  voices.push({ seq: track.melody, idx: 0, nextTime: t0, spb, type: track.wave, staccato: track.staccato, gain: 0.044, dest: melDetuneDest, detune: 9 });
   voices.push({ seq: track.bass, idx: 0, nextTime: t0, spb, type: track.bassWave, staccato: 0.95, gain: 0.06, dest: bassDest });
   if (track.drum) {
-    voices.push({ seq: track.drum, idx: 0, nextTime: t0, spb, drum: true, gain: 0.07 });
+    voices.push({ seq: track.drum, idx: 0, nextTime: t0, spb, drum: true, gain: 0.07, dest: drumDest });
     // A steady eighth-note hi-hat adds groove (skipped on ambient drumless tracks).
-    voices.push({ seq: [['h', 0.5]], idx: 0, nextTime: t0, spb, drum: true, gain: 0.024 });
+    voices.push({ seq: [['h', 0.5]], idx: 0, nextTime: t0, spb, drum: true, gain: 0.024, dest: drumDest });
   }
   schedTimer = setInterval(scheduleTick, TICK);
 }

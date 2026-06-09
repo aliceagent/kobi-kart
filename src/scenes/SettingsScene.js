@@ -46,18 +46,21 @@ export default class SettingsScene extends Phaser.Scene {
     this.difficulty = this.registry.get('difficulty') || 'medium';
     this.carSpeed = this.registry.get('carSpeed') || 'medium';
 
-    this.sectionLabel('🤖  AI DIFFICULTY', H * 0.165);
-    this.diffRow = this.makeRow(DIFFICULTY, 'bars', H * 0.31, () => this.difficulty, (k) => this.pickDifficulty(k));
+    this.sectionLabel('🤖  AI DIFFICULTY', H * 0.15);
+    this.diffRow = this.makeRow(DIFFICULTY, 'bars', H * 0.28, () => this.difficulty, (k) => this.pickDifficulty(k));
 
-    this.sectionLabel('🏎  CAR SPEED', H * 0.45);
-    this.speedRow = this.makeRow(SPEED, 'chevrons', H * 0.595, () => this.carSpeed, (k) => this.pickSpeed(k));
+    this.sectionLabel('🏎  CAR SPEED', H * 0.40);
+    this.speedRow = this.makeRow(SPEED, 'chevrons', H * 0.53, () => this.carSpeed, (k) => this.pickSpeed(k));
 
-    this.promptText = this.add.text(W / 2, H * 0.715,
+    this.sectionLabel('🔊  VOLUME', H * 0.655);
+    this.makeVolumeControl(H * 0.715);
+
+    this.promptText = this.add.text(W / 2, H * 0.775,
       'Click to choose — your picks are saved automatically', {
         fontFamily: 'monospace', fontSize: '14px', color: '#cdbfff', fontStyle: 'bold',
       }).setOrigin(0.5).setDepth(5);
 
-    this.makeBackButton(W / 2, H * 0.845);
+    this.makeBackButton(W / 2, H * 0.85);
     this.add.text(W / 2, H - 20,
       this.fromCharacter ? 'Esc or Back — return to kart select' : 'Esc or Back to return', {
         fontFamily: 'monospace', fontSize: '13px', color: '#ffffff',
@@ -156,6 +159,53 @@ export default class SettingsScene extends Phaser.Scene {
     g.fillStyle(0xffffff, 1); g.fillCircle(x, y, 11);
     g.lineStyle(3, 0x2aa84a, 1);
     g.beginPath(); g.moveTo(x - 5, y); g.lineTo(x - 1, y + 5); g.lineTo(x + 6, y - 5); g.strokePath();
+  }
+
+  // A clickable segmented volume bar (10 steps) showing the master volume,
+  // colour-graded green→yellow→orange as it rises. Click a segment to set it.
+  makeVolumeControl(cy) {
+    const W = this.scale.width;
+    const segs = 10;
+    const segW = 30;
+    const segH = 26;
+    const gap = 5;
+    const totalW = segs * segW + (segs - 1) * gap;
+    const startX = W / 2 - totalW / 2;
+    this.volGfx = this.add.graphics().setDepth(5);
+    this.volPct = this.add.text(startX + totalW + 16, cy, '', {
+      fontFamily: 'monospace', fontSize: '20px', color: '#ffffff', fontStyle: 'bold',
+      stroke: '#000000', strokeThickness: 3,
+    }).setOrigin(0, 0.5).setDepth(6);
+
+    const draw = () => {
+      const v = Audio.getVolume();
+      const lit = Math.round(v * segs);
+      const g = this.volGfx;
+      g.clear();
+      for (let i = 0; i < segs; i += 1) {
+        const x = startX + i * (segW + gap);
+        const on = i < lit;
+        const col = i < 4 ? 0x57c75a : (i < 7 ? 0xffe14d : 0xff7a3c);
+        g.fillStyle(0x000000, 0.4); g.fillRoundedRect(x + 2, cy - segH / 2 + 3, segW, segH, 5);
+        g.fillStyle(on ? col : 0x2a2440, on ? 1 : 0.55); g.fillRoundedRect(x, cy - segH / 2, segW, segH, 5);
+        g.lineStyle(2, 0xffffff, on ? 0.95 : 0.3); g.strokeRoundedRect(x, cy - segH / 2, segW, segH, 5);
+      }
+      this.volPct.setText(`${Math.round(v * 100)}%`);
+    };
+    this.redrawVolume = draw;
+
+    for (let i = 0; i < segs; i += 1) {
+      const x = startX + i * (segW + gap);
+      const zone = this.add.zone(x + segW / 2, cy, segW + gap, segH + 12).setInteractive({ useHandCursor: true });
+      zone.on('pointerdown', () => {
+        Audio.resumeAudio();
+        Audio.setVolume((i + 1) / segs);
+        Audio.sfx('beep');
+        draw();
+        if (this.promptText) this.promptText.setText(`Saved — volume: ${Math.round(Audio.getVolume() * 100)}%`);
+      });
+    }
+    draw();
   }
 
   update(_t, deltaMs) {
