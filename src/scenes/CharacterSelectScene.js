@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { ROSTER, initGrandPrix, cupById } from '../GrandPrix.js';
+import { ROSTER, initGrandPrix, cupById, kartClass } from '../GrandPrix.js';
 import { makeKartTexture } from '../textures.js';
 import * as Audio from '../Audio.js';
 import { addMuteButton, fadeIn, transitionTo } from '../ui.js';
@@ -76,6 +76,9 @@ export default class CharacterSelectScene extends Phaser.Scene {
         .on('pointerover', () => { if (this.isFree(i)) { this.cursor = i; this.redraw(); } })
         .on('pointerdown', () => { if (this.isFree(i)) { this.cursor = i; this.confirm(); } });
     });
+
+    // Stat panel for the hovered kart's class (updated in redraw()).
+    this.makeStatPanel(H * 0.79, H * 0.85);
 
     this.add.text(W / 2, H - 38,
       '←/→  (or A/D) move    ·    SPACE / ENTER / item key  pick    ·    click a car',
@@ -172,6 +175,50 @@ export default class CharacterSelectScene extends Phaser.Scene {
     transitionTo(this, 'CupSelectScene', { playerCount: this.playerCount });
   }
 
+  // A small panel showing the hovered kart's class + 1-5 stat bars.
+  makeStatPanel(labelY, barsY) {
+    const W = this.scale.width;
+    this.statClassLabel = this.add.text(W / 2, labelY, '', {
+      fontFamily: 'monospace', fontSize: '18px', color: '#ffe7b0', fontStyle: 'bold',
+      stroke: '#000000', strokeThickness: 4,
+    }).setOrigin(0.5);
+    const stats = ['SPEED', 'ACCEL', 'GRIP', 'WEIGHT'];
+    const groupW = 150;
+    const startX = W / 2 - (stats.length * groupW) / 2;
+    this.statMeta = { groupW, startX };
+    this.statBarsY = barsY;
+    this.statGfx = this.add.graphics();
+    stats.forEach((s, i) => {
+      this.add.text(startX + i * groupW + 6, barsY, s, {
+        fontFamily: 'monospace', fontSize: '12px', color: '#cdbfff', fontStyle: 'bold',
+        stroke: '#000000', strokeThickness: 3,
+      }).setOrigin(0, 0.5);
+    });
+  }
+
+  drawStats(idx) {
+    if (!this.statGfx) return;
+    const klass = kartClass(idx);
+    this.statClassLabel.setText(klass.label.toUpperCase());
+    const levels = [klass.disp.speed, klass.disp.accel, klass.disp.handling, klass.disp.weight];
+    const cols = [0x57c75a, 0xffd23f, 0x4d8bff, 0xff8a3c];
+    const { groupW, startX } = this.statMeta;
+    const y = this.statBarsY;
+    const g = this.statGfx;
+    g.clear();
+    for (let s = 0; s < 4; s += 1) {
+      const gx = startX + s * groupW + 56; // after the stat label
+      for (let b = 0; b < 5; b += 1) {
+        const bx = gx + b * 14;
+        const on = b < levels[s];
+        g.fillStyle(on ? cols[s] : 0x3a2f55, on ? 1 : 0.6);
+        g.fillRoundedRect(bx, y - 7, 11, 14, 2);
+        g.lineStyle(1.5, 0xffffff, on ? 0.5 : 0.2);
+        g.strokeRoundedRect(bx, y - 7, 11, 14, 2);
+      }
+    }
+  }
+
   setupKeys() {
     const KC = Phaser.Input.Keyboard.KeyCodes;
     this.leftKeys = [KC.A, KC.LEFT].map((c) => this.input.keyboard.addKey(c));
@@ -250,6 +297,7 @@ export default class CharacterSelectScene extends Phaser.Scene {
       c.tag.setText(owner >= 0 ? `P${owner + 1}` : '');
       if (owner >= 0) c.tag.setColor(Phaser.Display.Color.IntegerToColor(PLAYER_TINT[owner] || 0xffffff).rgba);
     });
+    this.drawStats(this.cursor);
   }
 
   update() {

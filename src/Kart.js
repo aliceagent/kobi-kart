@@ -126,6 +126,8 @@ export default class Kart {
     this.aiSkill = 1;
     this.speedMul = 1; // rubber-banding for AI
     this.speedScale = 1; // global car-speed setting (slow/medium/fast)
+    // Per-kart class multipliers (default = balanced; the scene sets these).
+    this.stats = { speed: 1, accel: 1, handling: 1, weight: 1 };
     this.coins = 0; // collected coins → small top-speed bonus
     this.coinMul = 1; // 1 + 0.012*coins
     this.draftMul = 1; // slipstream top-speed bonus
@@ -205,7 +207,8 @@ export default class Kart {
     if (this.oilImmune > 0) this.oilImmune -= dt;
     if (this.shieldTimer > 0) this.shieldTimer -= dt;
 
-    const decay = Math.exp(-TUNE.knockbackDecay * dt);
+    // Heavier karts shed knockback faster (resist shoves); lighter get tossed.
+    const decay = Math.exp(-TUNE.knockbackDecay * this.stats.weight * dt);
 
     if (this.frozen) {
       this.speed = 0;
@@ -304,7 +307,7 @@ export default class Kart {
     } else {
       cap = onRoad ? TUNE.maxSpeed : offMax;
     }
-    cap *= this.speedMul * this.speedScale * (terrain.capMul || 1) * this.coinMul * this.draftMul;
+    cap *= this.speedMul * this.speedScale * (terrain.capMul || 1) * this.coinMul * this.draftMul * this.stats.speed;
     if (this.bogTimer > 0) cap = Math.min(cap, 120 * this.speedScale); // bogged: crawl off the line
 
     if (this.drifting) {
@@ -316,14 +319,14 @@ export default class Kart {
         if (this.driftCharge >= TUNE.driftTiers[i].time) { tier = i + 1; break; }
       }
       this.driftSparkTier = tier;
-      this.speed += TUNE.accel * dt;
+      this.speed += TUNE.accel * this.stats.accel * dt;
       const driftCap = cap * TUNE.driftSpeedMul;
       if (this.speed > driftCap) this.speed = Math.max(driftCap, this.speed - TUNE.overspeedDecel * dt);
     } else if (braking) {
       // Brake to a stop, then back up slowly while still held.
       this.speed = Math.max(-TUNE.reverseSpeed * this.speedScale, this.speed - TUNE.brakeDecel * dt);
     } else {
-      this.speed += TUNE.accel * dt;
+      this.speed += TUNE.accel * this.stats.accel * dt;
     }
     if (!this.drifting && this.speed > cap) this.speed = Math.max(cap, this.speed - TUNE.overspeedDecel * dt);
 
@@ -350,7 +353,7 @@ export default class Kart {
       turnRate = braking ? TUNE.driftTurnRate : TUNE.turnRate;
       if (lowGrip) turnRate *= TUNE.slipTurnMul; // twitchy on ice
     }
-    this.heading += effSteer * turnRate * turnFactor * dt;
+    this.heading += effSteer * turnRate * this.stats.handling * turnFactor * dt;
 
     // The engine pushes along the heading; grip pulls actual velocity toward
     // that. Full grip (1) snaps instantly (normal handling); low grip lets
