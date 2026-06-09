@@ -202,7 +202,7 @@ export default class SettingsScene extends Phaser.Scene {
       g.lineStyle(3, 0xffffff, hover ? 1 : 0.85); g.strokeRoundedRect(x - w / 2, y - h / 2, w, h, 13);
     };
     draw(false);
-    const text = this.add.text(x, y, '‹ BACK', {
+    const text = this.add.text(x, y, '← BACK', {
       fontFamily: 'monospace', fontSize: '22px', color: '#ffffff', fontStyle: 'bold',
       stroke: '#102a5c', strokeThickness: 4,
     }).setOrigin(0.5).setDepth(6);
