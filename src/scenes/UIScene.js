@@ -33,6 +33,7 @@ export default class UIScene extends Phaser.Scene {
       stroke: '#000000', strokeThickness: 4,
     }).setOrigin(0.5, 0).setDepth(11);
 
+    this.lightsGfx = this.add.graphics().setDepth(12); // start-light gantry
     this.countdownLabel = this.add.text(W / 2, this.scale.height / 2 - 40, '', {
       fontFamily: 'monospace', fontSize: '96px', color: '#ffffff', fontStyle: 'bold',
       stroke: '#000000', strokeThickness: 9,
@@ -291,7 +292,19 @@ export default class UIScene extends Phaser.Scene {
     const themeName = race.theme ? race.theme.name.toUpperCase() : '';
     const total = race.gp.themeOrder.length;
     this.banner.setText(`RACE ${race.gp.raceIndex + 1}/${total}   ·   ${themeName}   ·   LAP ${lap}/${LAPS}`);
-    this.countdownLabel.setText(race.countdownText || '');
+    // Start lights: red bulbs ramp 3→2→1, all flash green on GO. The number
+    // mirrors them (the "4" warm-up second shows just the empty gantry).
+    let cLabel = race.countdownText && race.countdownText !== '4' ? race.countdownText : '';
+    if (race.state === 'countdown') {
+      const cd = race.countdown;
+      this.drawStartLights(cd <= 1 ? 3 : cd <= 2 ? 2 : cd <= 3 ? 1 : 0, false);
+    } else if (race.state === 'racing' && race.raceElapsed < 0.7) {
+      this.drawStartLights(0, true);
+      cLabel = 'GO!';
+    } else {
+      this.lightsGfx.clear();
+    }
+    this.countdownLabel.setText(cLabel);
     const attract = !!(race.gp && race.gp.attract);
     this.revHint.setText(race.state === 'countdown' && !attract ? 'tap BOOST as GO! flashes for a 🚀 rocket start' : '');
     if (attract) {
@@ -359,6 +372,32 @@ export default class UIScene extends Phaser.Scene {
       g.moveTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
       g.lineTo(cx + Math.cos(a) * r2, cy + Math.sin(a) * r2);
       g.strokePath();
+    }
+  }
+
+  // Start-light gantry: 3 bulbs. red 1→2→3 over the countdown, all green on GO.
+  drawStartLights(redOn, green) {
+    const g = this.lightsGfx;
+    g.clear();
+    const cx = this.scale.width / 2;
+    const cy = this.scale.height * 0.24;
+    const n = 3; const spacing = 58; const r = 18;
+    const hw = (n - 1) * spacing + r * 2 + 30; const hh = r * 2 + 22;
+    g.fillStyle(0x000000, 0.4); g.fillRoundedRect(cx - hw / 2 + 3, cy - hh / 2 + 4, hw, hh, 13);
+    g.fillStyle(0x222530, 1); g.fillRoundedRect(cx - hw / 2, cy - hh / 2, hw, hh, 13);
+    g.lineStyle(2, 0x000000, 0.5); g.strokeRoundedRect(cx - hw / 2, cy - hh / 2, hw, hh, 13);
+    for (let i = 0; i < n; i += 1) {
+      const x = cx - ((n - 1) * spacing) / 2 + i * spacing;
+      const lit = green || i < redOn;
+      const onCol = green ? 0x33d14a : 0xff3b30;
+      g.fillStyle(0x0a0a0e, 1); g.fillCircle(x, cy, r + 2);
+      if (lit) {
+        g.fillStyle(onCol, 0.28); g.fillCircle(x, cy, r + 9);
+        g.fillStyle(onCol, 1); g.fillCircle(x, cy, r);
+        g.fillStyle(0xffffff, 0.65); g.fillCircle(x - 5, cy - 5, r * 0.34);
+      } else {
+        g.fillStyle(green ? 0x123a18 : 0x3a1414, 1); g.fillCircle(x, cy, r);
+      }
     }
   }
 
