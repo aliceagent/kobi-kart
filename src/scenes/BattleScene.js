@@ -230,14 +230,22 @@ export default class BattleScene extends Phaser.Scene {
   buildArenaFeatures() {
     const ar = this.arena;
     const g = this.add.graphics().setDepth(3);
-    (ar.blocks || []).forEach((b) => {
+    (ar.blocks || []).forEach((b, i) => {
       const p = abs(b.fx, b.fy);
-      this.blocks.push({ x: p.x, y: p.y, r: b.r });
-      // Tyre-stack / boulder look.
-      g.fillStyle(0x000000, 0.25); g.fillEllipse(p.x, p.y + b.r * 0.5, b.r * 2, b.r * 0.7);
-      g.fillStyle(0x1c1c22, 1); g.fillCircle(p.x, p.y, b.r);
-      g.fillStyle(ar.accent, 0.9); g.fillCircle(p.x, p.y, b.r * 0.6);
-      g.fillStyle(0x1c1c22, 1); g.fillCircle(p.x, p.y, b.r * 0.32);
+      const block = { x: p.x, y: p.y, r: b.r };
+      if (ar.id === 'stadium') {
+        // Stadium pillars patrol vertically — drawn per frame in drawGimmicks.
+        block.baseY = p.y;
+        block.phase = i * Math.PI;
+        block.range = ARENA.h * 0.26;
+      } else {
+        // Static tyre-stack / boulder look.
+        g.fillStyle(0x000000, 0.25); g.fillEllipse(p.x, p.y + b.r * 0.5, b.r * 2, b.r * 0.7);
+        g.fillStyle(0x1c1c22, 1); g.fillCircle(p.x, p.y, b.r);
+        g.fillStyle(ar.accent, 0.9); g.fillCircle(p.x, p.y, b.r * 0.6);
+        g.fillStyle(0x1c1c22, 1); g.fillCircle(p.x, p.y, b.r * 0.32);
+      }
+      this.blocks.push(block);
     });
     (ar.walls || []).forEach((w) => {
       const cp = abs(w.fx, w.fy);
@@ -254,6 +262,19 @@ export default class BattleScene extends Phaser.Scene {
       const p = abs(gy.fx, gy.fy);
       this.geysers.push({ x: p.x, y: p.y, r: gy.r, phase: 'wait', timer: 1.5 + Math.random() * 2 });
     });
+
+    // Signature gimmicks (motion in updateArenaGimmick, drawing in drawGimmicks).
+    this.gimmickGfx = this.add.graphics().setDepth(3);
+    this.snowball = null;
+    this.teleporters = null;
+    this.lavaSurge = null;
+    if (ar.id === 'ice') {
+      this.snowball = { x: ARENA.x + ARENA.w / 2, y: ARENA.y + ARENA.h * 0.25, vx: 150, vy: 115, r: 26, roll: 0 };
+    } else if (ar.id === 'maze') {
+      this.teleporters = [abs(0.13, 0.16), abs(0.87, 0.84)].map((p) => ({ x: p.x, y: p.y, r: 24 }));
+    } else if (ar.id === 'volcano') {
+      this.lavaSurge = { phase: 'wait', timer: 14, x: 0, dir: 1, w: 64 };
+    }
   }
 
   // ----------------------------------------------------------------- karts ----
@@ -285,6 +306,7 @@ export default class BattleScene extends Phaser.Scene {
       kart.hitsTaken = 0; // timeout tiebreak: fewer hits taken wins
       kart.stealCd = 0; // ram-steal guard: one theft per spin-out
       kart.ghost = false; // eliminated karts haunt the arena instead of vanishing
+      kart.teleCd = 0; // maze teleporter cooldown (no ping-ponging)
       this.karts.push(kart);
       if (!kart.isAI) this.humans.push(kart);
     });
@@ -297,6 +319,9 @@ export default class BattleScene extends Phaser.Scene {
       [0.5, 0.22], [0.78, 0.32], [0.78, 0.68], [0.5, 0.78], [0.22, 0.68], [0.22, 0.32],
       [0.38, 0.5], [0.62, 0.5],
     ];
+    // The maze's inner walls cull several standard spots — add wall-safe ones
+    // in its open quadrants so it isn't box-poor.
+    if (this.arenaId === 'maze') spots.push([0.3, 0.3], [0.7, 0.7], [0.3, 0.7], [0.7, 0.3]);
     for (const [fx, fy] of spots) {
       const p = abs(fx, fy);
       if (this.blocked(p.x, p.y, 30)) continue;
@@ -352,6 +377,7 @@ export default class BattleScene extends Phaser.Scene {
       if (!k.out || k.ghost) k.frozen = false;
       if (k.battleInvuln > 0) k.battleInvuln -= dt;
       if (k.stealCd > 0) k.stealCd -= dt;
+      if (k.teleCd > 0) k.teleCd -= dt;
     });
     this.karts.forEach((k) => this.driveKart(k, dt));
     this.karts.forEach((k) => this.releaseMiniTurbo(k));
@@ -361,6 +387,7 @@ export default class BattleScene extends Phaser.Scene {
     this.updateProjectiles(dt);
     this.updateTraps(dt);
     this.updateGeysers(dt);
+    this.updateArenaGimmick(dt);
     this.resolveCollisions();
     this.updateEngines();
     this.updateSkids(dt);
@@ -587,7 +614,10 @@ export default class BattleScene extends Phaser.Scene {
     for (const b of this.blocks) {
       const dx = kart.x - b.x; const dy = kart.y - b.y;
       const dist = Math.hypot(dx, dy); const minD = r + b.r;
-      if (dist < minD && dist > 0.0001) { const nx = dx / dist; const ny = dy / dist; kart.x = b.x + nx * minD; kart.y = b.y + ny * minD; kart.speed *= 0.6; }
+      if (dist >= minD) continue;
+      if (dist <= 0.0001) { kart.x = b.x + minD; kart.speed *= 0.6; continue; } // dead-centre (a patrolling pillar swept onto us)
+      const nx = dx / dist; const ny = dy / dist;
+      kart.x = b.x + nx * minD; kart.y = b.y + ny * minD; kart.speed *= 0.6;
     }
     for (const w of this.walls) {
       const cx = Phaser.Math.Clamp(kart.x, w.x, w.x + w.w);
@@ -822,6 +852,140 @@ export default class BattleScene extends Phaser.Scene {
     }
   }
 
+  // Per-arena signature gimmicks: the ice snowball, maze teleporters, patrolling
+  // stadium pillars, and the volcano's sweeping lava surge.
+  updateArenaGimmick(dt) {
+    // Ice: the snowball rolls, bounces off the bounds and cover, and flattens.
+    if (this.snowball) {
+      const s = this.snowball;
+      s.x += s.vx * dt; s.y += s.vy * dt; s.roll += dt;
+      const bd = this.bounds;
+      if (s.x < bd.x + s.r) { s.x = bd.x + s.r; s.vx = Math.abs(s.vx); }
+      else if (s.x > bd.x + bd.w - s.r) { s.x = bd.x + bd.w - s.r; s.vx = -Math.abs(s.vx); }
+      if (s.y < bd.y + s.r) { s.y = bd.y + s.r; s.vy = Math.abs(s.vy); }
+      else if (s.y > bd.y + bd.h - s.r) { s.y = bd.y + bd.h - s.r; s.vy = -Math.abs(s.vy); }
+      for (const b of this.blocks) {
+        const dx = s.x - b.x; const dy = s.y - b.y;
+        const d = Math.hypot(dx, dy); const minD = s.r + b.r;
+        if (d < minD && d > 0.0001) {
+          const nx = dx / d; const ny = dy / d;
+          s.x = b.x + nx * minD; s.y = b.y + ny * minD;
+          const vd = s.vx * nx + s.vy * ny;
+          if (vd < 0) { s.vx -= 2 * vd * nx; s.vy -= 2 * vd * ny; }
+        }
+      }
+      for (const k of this.karts) {
+        if (k.out || k.battleInvuln > 0) continue;
+        if ((k.x - s.x) ** 2 + (k.y - s.y) ** 2 < (s.r + k.radius) ** 2) {
+          const d = Math.hypot(k.x - s.x, k.y - s.y) || 1;
+          k.knockX += ((k.x - s.x) / d) * 320;
+          k.knockY += ((k.y - s.y) / d) * 320;
+          if (k.hit()) { this.burst(k.x, k.y, 0xffffff); Audio.sfx('hit'); this.popBalloon(k); }
+        }
+      }
+    }
+    // Maze: drive onto a pad to pop out of its twin (per-kart cooldown).
+    if (this.teleporters) {
+      for (const k of this.karts) {
+        if (k.teleCd > 0) continue;
+        for (let i = 0; i < 2; i += 1) {
+          const t = this.teleporters[i];
+          if ((k.x - t.x) ** 2 + (k.y - t.y) ** 2 < t.r * t.r) {
+            const dest = this.teleporters[1 - i];
+            this.burst(k.x, k.y, 0x00e5ff);
+            k.x = dest.x; k.y = dest.y;
+            k.teleCd = 1.5;
+            this.burst(dest.x, dest.y, 0x00e5ff);
+            if (!k.isAI) Audio.sfx('jump');
+            break;
+          }
+        }
+      }
+    }
+    // Stadium: the cover pillars patrol vertically (collisions read live x/y).
+    for (const b of this.blocks) {
+      if (b.baseY != null) b.y = b.baseY + Math.sin(this.elapsed * 0.5 + b.phase) * b.range;
+    }
+    // Volcano: a telegraphed wall of lava sweeps the arena.
+    if (this.lavaSurge) {
+      const L = this.lavaSurge;
+      const bd = this.bounds;
+      L.timer -= dt;
+      if (L.phase === 'wait' && L.timer <= 0) {
+        L.phase = 'warn'; L.timer = 1.2; Audio.sfx('beep');
+      } else if (L.phase === 'warn' && L.timer <= 0) {
+        L.phase = 'sweep';
+        L.x = L.dir > 0 ? bd.x - L.w : bd.x + bd.w + L.w;
+        Audio.sfx('hit');
+        this.cameras.main.shake(180, 0.005);
+      } else if (L.phase === 'sweep') {
+        L.x += L.dir * ((bd.w + 2 * L.w) / 2.2) * dt;
+        for (const k of this.karts) {
+          if (k.out || k.battleInvuln > 0) continue;
+          if (Math.abs(k.x - L.x) < L.w / 2 + k.radius) {
+            k.knockX += L.dir * 260;
+            if (k.hit()) { this.burst(k.x, k.y, 0xff7a1a); Audio.sfx('hit'); this.popBalloon(k); }
+          }
+        }
+        if ((L.dir > 0 && L.x > bd.x + bd.w + L.w) || (L.dir < 0 && L.x < bd.x - L.w)) {
+          L.phase = 'wait';
+          L.timer = 20 + Math.random() * 8;
+          L.dir *= -1;
+        }
+      }
+    }
+  }
+
+  // Gimmick visuals: pads + patrolling pillars under the karts (gimmickGfx),
+  // the snowball + lava surge over them (hazardGfx, passed in).
+  drawGimmicks(hz) {
+    const gg = this.gimmickGfx;
+    if (!gg) return;
+    gg.clear();
+    for (const b of this.blocks) {
+      if (b.baseY == null) continue;
+      gg.fillStyle(0x000000, 0.25); gg.fillEllipse(b.x, b.y + b.r * 0.5, b.r * 2, b.r * 0.7);
+      gg.fillStyle(0x1c1c22, 1); gg.fillCircle(b.x, b.y, b.r);
+      gg.fillStyle(this.arena.accent, 0.9); gg.fillCircle(b.x, b.y, b.r * 0.6);
+      gg.fillStyle(0x1c1c22, 1); gg.fillCircle(b.x, b.y, b.r * 0.32);
+    }
+    if (this.teleporters) {
+      for (const t of this.teleporters) {
+        const pul = 0.55 + 0.3 * Math.sin(this.elapsed * 5);
+        gg.fillStyle(0x0c2a33, 0.9); gg.fillCircle(t.x, t.y, t.r);
+        gg.lineStyle(3, 0x00e5ff, pul); gg.strokeCircle(t.x, t.y, t.r);
+        gg.lineStyle(2, 0x00e5ff, 1.1 - pul); gg.strokeCircle(t.x, t.y, t.r * (0.4 + 0.25 * Math.sin(this.elapsed * 3)));
+      }
+    }
+    if (this.snowball) {
+      const s = this.snowball;
+      hz.fillStyle(0x000000, 0.2); hz.fillEllipse(s.x + 4, s.y + s.r * 0.75, s.r * 2, s.r * 0.7);
+      hz.fillStyle(0xffffff, 1); hz.fillCircle(s.x, s.y, s.r);
+      hz.fillStyle(0xdfeefb, 0.8); hz.fillCircle(s.x + s.r * 0.25, s.y + s.r * 0.25, s.r * 0.55);
+      for (let i = 0; i < 3; i += 1) {
+        const a = s.roll * 3 + (i * Math.PI * 2) / 3;
+        hz.fillStyle(0xb9d4e8, 0.8);
+        hz.fillCircle(s.x + Math.cos(a) * s.r * 0.55, s.y + Math.sin(a) * s.r * 0.55, 3);
+      }
+    }
+    if (this.lavaSurge) {
+      const L = this.lavaSurge;
+      const bd = this.bounds;
+      if (L.phase === 'warn') {
+        const flash = 0.3 + 0.3 * Math.sin(this.elapsed * 25);
+        const wx = L.dir > 0 ? bd.x : bd.x + bd.w - 26;
+        hz.fillStyle(0xff5a1a, flash); hz.fillRect(wx, bd.y, 26, bd.h);
+      } else if (L.phase === 'sweep') {
+        hz.fillStyle(0x8a1e00, 0.85); hz.fillRect(L.x - L.w / 2, bd.y, L.w, bd.h);
+        hz.fillStyle(0xff3b00, 0.9); hz.fillRect(L.x - L.w / 2 + 6, bd.y, L.w - 12, bd.h);
+        hz.fillStyle(0xffd23f, 0.9);
+        for (let y = bd.y + 10; y < bd.y + bd.h; y += 34) {
+          hz.fillCircle(L.x + Math.sin(y * 0.2 + this.elapsed * 10) * 8, y, 7);
+        }
+      }
+    }
+  }
+
   resolveCollisions() {
     for (let i = 0; i < this.karts.length; i += 1) {
       for (let j = i + 1; j < this.karts.length; j += 1) {
@@ -1050,6 +1214,7 @@ export default class BattleScene extends Phaser.Scene {
       g.lineStyle(4, 0xff5a5a, 0.7 + 0.3 * Math.sin(this.elapsed * 12));
       g.strokeRect(b.x, b.y, b.w, b.h);
     }
+    this.drawGimmicks(g);
   }
 
   drawDynamic() {
