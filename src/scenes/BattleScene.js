@@ -343,6 +343,10 @@ export default class BattleScene extends Phaser.Scene {
     // The maze's inner walls cull several standard spots — add wall-safe ones
     // in its open quadrants so it isn't box-poor.
     if (this.arenaId === 'maze') spots.push([0.3, 0.3], [0.7, 0.7], [0.3, 0.7], [0.7, 0.3]);
+    // The stadium's pillars cull both centre spots — which were the only ones
+    // that survive the fully-shrunken sudden-death ring, leaving the endgame
+    // item-less. These two sit clear of the pillar patrols AND inside the ring.
+    if (this.arenaId === 'stadium') spots.push([0.5, 0.38], [0.5, 0.62]);
     for (const [fx, fy] of spots) {
       const p = abs(fx, fy);
       if (this.blocked(p.x, p.y, 30)) continue;
@@ -814,7 +818,13 @@ export default class BattleScene extends Phaser.Scene {
         if (p.target) {
           const desired = Math.atan2(p.target.y - p.y, p.target.x - p.x);
           const cur = Math.atan2(p.vy, p.vx);
-          const na = cur + Phaser.Math.Clamp(Phaser.Math.Angle.Wrap(desired - cur), -p.turnRate * dt, p.turnRate * dt);
+          // Close-range homing boost: at the base turn rate a shell fired
+          // off-axis settles into a stable ~230px circle around its target
+          // and never connects. Tightening the turn as range closes makes it
+          // spiral in instead.
+          const range = Math.hypot(p.target.x - p.x, p.target.y - p.y);
+          const tr = p.turnRate * (1 + 2.5 * Math.max(0, 1 - range / 320));
+          const na = cur + Phaser.Math.Clamp(Phaser.Math.Angle.Wrap(desired - cur), -tr * dt, tr * dt);
           p.vx = Math.cos(na) * p.speed; p.vy = Math.sin(na) * p.speed;
         }
       }
@@ -1162,7 +1172,7 @@ export default class BattleScene extends Phaser.Scene {
   // Otherwise (ramming an already-spinning kart) it's an extra theft guarded by
   // stealCd, so each spin-out can only be robbed once.
   stealBalloon(thief, victim, asHit) {
-    if (thief.out || victim.out || thief.balloons >= START_BALLOONS) return false;
+    if (this.state !== 'battle' || thief.out || victim.out || thief.balloons >= START_BALLOONS) return false;
     if (asHit) {
       if (victim.battleInvuln > 0) return false;
     } else if (victim.stealCd > 0 || victim.spinTimer <= 0) {
@@ -1231,7 +1241,10 @@ export default class BattleScene extends Phaser.Scene {
   // this to gate kill-feed lines). sx/sy = where the hit came from, for the
   // directional hit flash on human karts.
   popBalloon(kart, sx, sy) {
-    if (kart.out || kart.battleInvuln > 0) return false;
+    // State guard: when two karts pop in the same frame (one geyser, both on
+    // their last balloon), the first pop ends the battle — without this the
+    // second pop would ghost the freshly-declared winner on the results screen.
+    if (this.state !== 'battle' || kart.out || kart.battleInvuln > 0) return false;
     kart.balloons -= 1;
     kart.hitsTaken += 1;
     kart.battleInvuln = 2;
