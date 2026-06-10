@@ -4,6 +4,7 @@ import { ROSTER, kartClass } from '../GrandPrix.js';
 import { makeKartTexture, makeGameTextures } from '../textures.js';
 import * as Audio from '../Audio.js';
 import { addMuteButton, fadeIn, transitionTo, textStrokeFor } from '../ui.js';
+import * as Cosmetics from '../Cosmetics.js';
 
 // Balloon Battle: a single-screen walled arena (no laps). 2 players + 2-or-4 AI
 // fight; each kart has 3 balloons; a spin-out hit pops one; last kart with
@@ -328,6 +329,7 @@ export default class BattleScene extends Phaser.Scene {
       kart.teleCd = 0; // maze teleporter cooldown (no ping-ponging)
       kart.aliveTime = 0; // per-round survival, for the match stats
       kart.pinnedTime = 0; // anti-pinning: time spent wedged wall+rival
+      if (!kart.isAI) Cosmetics.applyToKart(this, kart, i, makeKartTexture);
       this.karts.push(kart);
       if (!kart.isAI) this.humans.push(kart);
     });
@@ -1367,6 +1369,8 @@ export default class BattleScene extends Phaser.Scene {
     this.banner.setDepth(46).setText('');
     const name = winner ? winner.name.toUpperCase() : 'NOBODY';
     const matchOver = !!winner && m.wins[winner.id] >= 2;
+    // Human winners bank shop coins: 10 a round, 30 for taking the match.
+    if (winner && !winner.isAI) Cosmetics.addCoins(matchOver ? 30 : 10);
     const title = this.add.text(W / 2, H * 0.24, matchOver ? `${name} WINS THE MATCH!` : `${name} TAKES ROUND ${this.round}!`, {
       fontFamily: 'monospace', fontSize: matchOver ? '42px' : '38px', color: '#ffe14d', fontStyle: 'bold',
       stroke: '#c0392b', strokeThickness: 8,
@@ -1406,6 +1410,7 @@ export default class BattleScene extends Phaser.Scene {
     dim.fillStyle(0x0a0a16, 0.6); dim.fillRect(0, 0, W, H);
     this.banner.setDepth(46).setText('');
     const name = winner ? winner.name.toUpperCase() : 'NOBODY';
+    if (winner && !winner.isAI) Cosmetics.addCoins(15); // shop reward
     const t = this.add.text(W / 2, H * 0.38, `${name} WINS!`, {
       fontFamily: 'monospace', fontSize: '56px', color: '#ffe14d', fontStyle: 'bold', stroke: '#c0392b', strokeThickness: 9,
     }).setOrigin(0.5).setDepth(46);
@@ -1509,7 +1514,7 @@ export default class BattleScene extends Phaser.Scene {
         const bx = k.x - Math.cos(k.heading) * 16; const by = k.y - Math.sin(k.heading) * 16;
         const nx = -Math.sin(k.heading); const ny = Math.cos(k.heading);
         const len = 16 + (Math.sin(this.elapsed * 50 + k.x) + 1) * 5;
-        g.fillStyle(0xffd23f, 0.85); g.fillTriangle(bx + nx * 6, by + ny * 6, bx - nx * 6, by - ny * 6, bx - Math.cos(k.heading) * len, by - Math.sin(k.heading) * len);
+        g.fillStyle(k.flameColor || 0xffd23f, 0.85); g.fillTriangle(bx + nx * 6, by + ny * 6, bx - nx * 6, by - ny * 6, bx - Math.cos(k.heading) * len, by - Math.sin(k.heading) * len);
       }
     }
   }

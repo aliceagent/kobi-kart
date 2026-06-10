@@ -59,10 +59,12 @@ export default class TitleScene extends Phaser.Scene {
     this.makeButton(W / 2, H * 0.52, '2 PLAYERS', 0x4d8bff, () => this.startGame(2), { h: 50 });
     this.makeButton(W / 2, H * 0.615, '⚔ BATTLE', 0xff8a2c, () => this.startBattle(), { h: 50 });
 
-    this.makeButton(W / 2 - 162, H * 0.70, 'HOW TO PLAY', 0x2fa86a,
-      () => transitionTo(this, 'TutorialScene'), { w: 300, h: 44, fontSize: 18 });
-    this.makeButton(W / 2 + 162, H * 0.70, 'SETTINGS', 0x9b6bce,
-      () => transitionTo(this, 'SettingsScene'), { w: 300, h: 44, fontSize: 20 });
+    this.makeButton(W / 2 - 205, H * 0.70, 'HOW TO PLAY', 0x2fa86a,
+      () => transitionTo(this, 'TutorialScene'), { w: 196, h: 44, fontSize: 16 });
+    this.makeButton(W / 2, H * 0.70, '🛒 SHOP', 0xd9a521,
+      () => transitionTo(this, 'ShopScene'), { w: 190, h: 44, fontSize: 18 });
+    this.makeButton(W / 2 + 205, H * 0.70, 'SETTINGS', 0x9b6bce,
+      () => transitionTo(this, 'SettingsScene'), { w: 196, h: 44, fontSize: 17 });
 
     // Controls — one labelled line per player so every key is clear. A dark
     // strip + outline keeps them readable over the grass.

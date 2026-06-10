@@ -12,6 +12,7 @@ import BattleScene from './scenes/BattleScene.js';
 import BattleSetupScene from './scenes/BattleSetupScene.js';
 import UIScene from './scenes/UIScene.js';
 import ResultsScene from './scenes/ResultsScene.js';
+import ShopScene from './scenes/ShopScene.js';
 import CeremonyScene from './scenes/CeremonyScene.js';
 
 class BootScene extends Phaser.Scene {
@@ -56,7 +57,7 @@ const config = {
   parent: 'game',
   backgroundColor: '#0e0e16',
   pixelArt: false,
-  scene: [BootScene, TitleScene, SettingsScene, TutorialScene, CupSelectScene, CharacterSelectScene, RaceScene, BattleScene, BattleSetupScene, UIScene, ResultsScene, CeremonyScene],
+  scene: [BootScene, TitleScene, SettingsScene, TutorialScene, CupSelectScene, CharacterSelectScene, RaceScene, BattleScene, BattleSetupScene, UIScene, ResultsScene, CeremonyScene, ShopScene],
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,

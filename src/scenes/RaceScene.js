@@ -6,6 +6,7 @@ import { ROSTER, POINTS, LAPS, AI_DIFFICULTY, CAR_SPEEDS, CLASSES } from '../Gra
 import { makeKartTexture, makeGameTextures } from '../textures.js';
 import { fadeIn, transitionTo } from '../ui.js';
 import * as Audio from '../Audio.js';
+import * as Cosmetics from '../Cosmetics.js';
 
 const WORLD_W = 2800;
 const WORLD_H = 2000;
@@ -252,6 +253,7 @@ export default class RaceScene extends Phaser.Scene {
       kart.stats = { speed: klass.speed, accel: klass.accel, handling: klass.handling, weight: klass.weight };
       kart.idxPos = idx;
       kart.halfway = false;
+      if (!kart.isAI) Cosmetics.applyToKart(this, kart, i, makeKartTexture);
       this.racers.push(kart);
       if (!kart.isAI) this.humans.push(kart);
     });
@@ -505,6 +507,13 @@ export default class RaceScene extends Phaser.Scene {
       bestLap: k.bestLap, coins: k.coins,
     }));
     results.forEach((r) => { this.gp.points[r.id] += r.points; });
+    // Bank the humans' collected coins (plus a podium bonus) for the shop.
+    if (!this.attract && this.humans.length) {
+      const BONUS = [20, 12, 6, 3];
+      let banked = 0;
+      this.humans.forEach((h) => { banked += h.coins + (BONUS[h.place - 1] || 0); });
+      if (banked > 0) Cosmetics.addCoins(banked);
+    }
     this.gp.lastResults = results;
     this.registry.set('gp', this.gp);
 
@@ -1684,7 +1693,7 @@ export default class RaceScene extends Phaser.Scene {
         const len = 18 + (Math.sin(this.elapsed * 50 + r.x) + 1) * 5;
         const tipx = bx - Math.cos(r.heading) * len;
         const tipy = by - Math.sin(r.heading) * len;
-        g.fillStyle(hot ? 0xff7a1a : 0xffd23f, 0.85);
+        g.fillStyle(r.flameColor || (hot ? 0xff7a1a : 0xffd23f), 0.85);
         g.fillTriangle(bx + nx * 7, by + ny * 7, bx - nx * 7, by - ny * 7, tipx, tipy);
         g.fillStyle(0xfff3b0, 0.9);
         g.fillTriangle(bx + nx * 4, by + ny * 4, bx - nx * 4, by - ny * 4, bx - Math.cos(r.heading) * (len * 0.55), by - Math.sin(r.heading) * (len * 0.55));
