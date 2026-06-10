@@ -518,8 +518,8 @@ export default class TitleScene extends Phaser.Scene {
 
   startBattle() {
     Audio.resumeAudio();
-    // Couch battle: two players pick karts, then fight 2 AI in the arena.
-    transitionTo(this, 'CharacterSelectScene', { mode: 'battle', playerCount: 2 });
+    // Couch battle: pick an arena + AI count, then karts, then fight.
+    transitionTo(this, 'BattleSetupScene');
   }
 
   // Kick off a self-running, all-CPU demo race (one random world, hard AI).

@@ -15,6 +15,8 @@ export default class CharacterSelectScene extends Phaser.Scene {
     this.playerCount = (data && data.playerCount) || 1;
     this.cup = (data && data.cup) || 1;
     this.battle = !!(data && data.mode === 'battle');
+    this.battleArena = (data && data.arena) || 'stadium';
+    this.battleAiCount = (data && data.aiCount) || 2;
   }
 
   create() {
@@ -272,8 +274,9 @@ export default class CharacterSelectScene extends Phaser.Scene {
   start() {
     this.cameras.main.flash(250, 255, 255, 255);
     if (this.battle) {
-      this.registry.set('battle', { playerCount: this.playerCount, picks: this.picks.slice() });
-      this.time.delayedCall(260, () => transitionTo(this, 'BattleScene', { playerCount: this.playerCount, picks: this.picks.slice() }));
+      const cfg = { playerCount: this.playerCount, picks: this.picks.slice(), arena: this.battleArena, aiCount: this.battleAiCount };
+      this.registry.set('battle', cfg);
+      this.time.delayedCall(260, () => transitionTo(this, 'BattleScene', cfg));
       return;
     }
     initGrandPrix(this.registry, this.playerCount, this.picks, this.cup);
