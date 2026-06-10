@@ -100,6 +100,17 @@ export default class BattleScene extends Phaser.Scene {
     this.countText = '';
     this.elapsed = 0;
 
+    // Sudden death: a 90s match timer; at zero the arena shrinks until someone
+    // wins, and a hard cap ends it on balloons (fewest hits taken tiebreak).
+    this.bounds = { x: ARENA.x, y: ARENA.y, w: ARENA.w, h: ARENA.h };
+    this.matchTime = 90;
+    this.suddenDeath = false;
+    this.hardCap = 30;
+    this.timerText = this.add.text(ARENA.x + ARENA.w, 20, '1:30', {
+      fontFamily: 'monospace', fontSize: '18px', color: '#ffffff', fontStyle: 'bold',
+      stroke: '#000000', strokeThickness: 4,
+    }).setOrigin(1, 0.5).setDepth(31);
+
     Audio.resumeAudio();
     Audio.startMusic(this.arena.music || 'Carnival');
     this.engineOn = false;
@@ -243,6 +254,7 @@ export default class BattleScene extends Phaser.Scene {
       kart.battleInvuln = 0;
       kart.out = false;
       kart.aiTimer = 0;
+      kart.hitsTaken = 0; // timeout tiebreak: fewer hits taken wins
       this.karts.push(kart);
       if (!kart.isAI) this.humans.push(kart);
     });
@@ -305,6 +317,7 @@ export default class BattleScene extends Phaser.Scene {
     }
     if (this.state === 'over') { this.drawHazards(0); this.drawHUD(); this.drawDynamic(); return; }
 
+    this.updateMatchTimer(dt);
     this.karts.forEach((k) => { if (!k.out) k.frozen = false; if (k.battleInvuln > 0) k.battleInvuln -= dt; });
     this.karts.forEach((k) => this.driveKart(k, dt));
     this.karts.forEach((k) => this.releaseMiniTurbo(k));
@@ -319,6 +332,50 @@ export default class BattleScene extends Phaser.Scene {
     this.drawHazards(dt);
     this.drawDynamic();
     this.drawHUD();
+  }
+
+  // Tick the 90s match clock; at zero begin sudden death (the playable bounds
+  // shrink toward the centre over ~25s, forcing the survivors together), and
+  // after a further hard cap decide the winner on balloons.
+  updateMatchTimer(dt) {
+    if (!this.suddenDeath) {
+      this.matchTime -= dt;
+      const t = Math.max(0, this.matchTime);
+      const m = Math.floor(t / 60);
+      const s = Math.floor(t % 60);
+      this.timerText.setText(`${m}:${String(s).padStart(2, '0')}`);
+      this.timerText.setColor(t < 16 ? '#ff5a5a' : '#ffffff');
+      if (this.matchTime <= 0) this.startSuddenDeath();
+      return;
+    }
+    const minW = ARENA.w * 0.34;
+    const minH = ARENA.h * 0.34;
+    const rate = dt / 25; // full shrink takes ~25s
+    if (this.bounds.w > minW) { const dw = Math.min((ARENA.w - minW) * rate, this.bounds.w - minW); this.bounds.x += dw / 2; this.bounds.w -= dw; }
+    if (this.bounds.h > minH) { const dh = Math.min((ARENA.h - minH) * rate, this.bounds.h - minH); this.bounds.y += dh / 2; this.bounds.h -= dh; }
+    this.timerText.setText('SUDDEN DEATH');
+    this.timerText.setColor('#ff5a5a');
+    this.hardCap -= dt;
+    if (this.hardCap <= 0) this.timeoutEnd();
+  }
+
+  startSuddenDeath() {
+    this.suddenDeath = true;
+    Audio.sfx('finallap');
+    this.cameras.main.shake(200, 0.005);
+    this.banner.setText('HURRY UP!');
+    this.tweens.add({ targets: this.banner, scale: { from: 0.6, to: 1 }, duration: 300, ease: 'Back.Out' });
+    this.time.delayedCall(1500, () => { if (this.state === 'battle') { this.banner.setText(''); this.banner.setScale(1); } });
+  }
+
+  // Hard-cap timeout: most balloons wins; fewer hits taken breaks ties.
+  timeoutEnd() {
+    if (this.state !== 'battle') return;
+    this.state = 'over';
+    const ranked = this.karts.filter((k) => !k.out)
+      .sort((a, b) => (b.balloons - a.balloons) || (a.hitsTaken - b.hitsTaken));
+    this.banner.setText('');
+    this.showResults(ranked[0] || this.karts[0]);
   }
 
   driveKart(kart, dt) {
@@ -378,8 +435,9 @@ export default class BattleScene extends Phaser.Scene {
 
   clampToArena(kart) {
     const r = kart.radius;
-    const l = ARENA.x + r; const rt = ARENA.x + ARENA.w - r;
-    const tp = ARENA.y + r; const bt = ARENA.y + ARENA.h - r;
+    const b = this.bounds; // shrinks during sudden death
+    const l = b.x + r; const rt = b.x + b.w - r;
+    const tp = b.y + r; const bt = b.y + b.h - r;
     if (kart.x < l) { kart.x = l; if (kart.vx < 0) kart.vx *= -0.4; kart.speed *= 0.7; }
     else if (kart.x > rt) { kart.x = rt; if (kart.vx > 0) kart.vx *= -0.4; kart.speed *= 0.7; }
     if (kart.y < tp) { kart.y = tp; if (kart.vy < 0) kart.vy *= -0.4; kart.speed *= 0.7; }
@@ -462,7 +520,13 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   updateItemBoxes(dt) {
+    const bd = this.bounds;
     for (const b of this.itemBoxes) {
+      // Boxes swallowed by the closing arena are gone for the rest of the match.
+      if (this.suddenDeath && (b.x < bd.x + 16 || b.x > bd.x + bd.w - 16 || b.y < bd.y + 16 || b.y > bd.y + bd.h - 16)) {
+        b.active = false; b.timer = 99999; b.sprite.setVisible(false);
+        continue;
+      }
       if (b.active) {
         b.sprite.rotation += dt * 1.5;
         b.sprite.setScale(1 + Math.sin(this.elapsed * 4 + b.x) * 0.08);
@@ -505,11 +569,12 @@ export default class BattleScene extends Phaser.Scene {
       p.x += p.vx * dt; p.y += p.vy * dt;
       p.sprite.setPosition(p.x, p.y); p.sprite.rotation += dt * 12;
       if (!p.homing) {
-        // Bounce off arena walls.
-        if (p.x < ARENA.x + 9) { p.x = ARENA.x + 9; p.vx = Math.abs(p.vx); }
-        else if (p.x > ARENA.x + ARENA.w - 9) { p.x = ARENA.x + ARENA.w - 9; p.vx = -Math.abs(p.vx); }
-        if (p.y < ARENA.y + 9) { p.y = ARENA.y + 9; p.vy = Math.abs(p.vy); }
-        else if (p.y > ARENA.y + ARENA.h - 9) { p.y = ARENA.y + ARENA.h - 9; p.vy = -Math.abs(p.vy); }
+        // Bounce off the (possibly shrunken) arena bounds.
+        const bd = this.bounds;
+        if (p.x < bd.x + 9) { p.x = bd.x + 9; p.vx = Math.abs(p.vx); }
+        else if (p.x > bd.x + bd.w - 9) { p.x = bd.x + bd.w - 9; p.vx = -Math.abs(p.vx); }
+        if (p.y < bd.y + 9) { p.y = bd.y + 9; p.vy = Math.abs(p.vy); }
+        else if (p.y > bd.y + bd.h - 9) { p.y = bd.y + bd.h - 9; p.vy = -Math.abs(p.vy); }
         // Bounce off inner blocks + walls.
         for (const b of this.blocks) { const dx = p.x - b.x; const dy = p.y - b.y; const d = Math.hypot(dx, dy); const minD = 9 + b.r; if (d < minD && d > 0.0001) { this.reflectShell(p, dx / d, dy / d, b.x, b.y, minD); break; } }
         for (const w of this.walls) { const cx = Phaser.Math.Clamp(p.x, w.x, w.x + w.w); const cy = Phaser.Math.Clamp(p.y, w.y, w.y + w.h); const dx = p.x - cx; const dy = p.y - cy; const d = Math.hypot(dx, dy); if (d < 9 && d > 0.0001) { this.reflectShell(p, dx / d, dy / d, cx, cy, 9); break; } }
@@ -601,6 +666,7 @@ export default class BattleScene extends Phaser.Scene {
   popBalloon(kart) {
     if (kart.out || kart.battleInvuln > 0) return;
     kart.balloons -= 1;
+    kart.hitsTaken += 1;
     kart.battleInvuln = 2;
     this.burst(kart.x, kart.y, kart.color);
     this.cameras.main.shake(120, 0.006);
@@ -689,6 +755,17 @@ export default class BattleScene extends Phaser.Scene {
         g.fillStyle(0x000000, 0.25); g.fillCircle(gy.x, gy.y, gy.r * 0.6);
         g.lineStyle(2, 0xff7a1a, 0.4); g.strokeCircle(gy.x, gy.y, gy.r * 0.6);
       }
+    }
+    // Sudden death: the arena closes in — tint the dead zone + animated edge.
+    if (this.suddenDeath) {
+      const b = this.bounds;
+      g.fillStyle(0xe23b3b, 0.16 + 0.04 * Math.sin(this.elapsed * 10));
+      g.fillRect(ARENA.x, ARENA.y, b.x - ARENA.x, ARENA.h);
+      g.fillRect(b.x + b.w, ARENA.y, (ARENA.x + ARENA.w) - (b.x + b.w), ARENA.h);
+      g.fillRect(b.x, ARENA.y, b.w, b.y - ARENA.y);
+      g.fillRect(b.x, b.y + b.h, b.w, (ARENA.y + ARENA.h) - (b.y + b.h));
+      g.lineStyle(4, 0xff5a5a, 0.7 + 0.3 * Math.sin(this.elapsed * 12));
+      g.strokeRect(b.x, b.y, b.w, b.h);
     }
   }
 
