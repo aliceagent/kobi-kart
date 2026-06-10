@@ -327,6 +327,7 @@ export default class BattleScene extends Phaser.Scene {
       kart.ghost = false; // eliminated karts haunt the arena instead of vanishing
       kart.teleCd = 0; // maze teleporter cooldown (no ping-ponging)
       kart.aliveTime = 0; // per-round survival, for the match stats
+      kart.pinnedTime = 0; // anti-pinning: time spent wedged wall+rival
       this.karts.push(kart);
       if (!kart.isAI) this.humans.push(kart);
     });
@@ -410,6 +411,7 @@ export default class BattleScene extends Phaser.Scene {
     this.updateGeysers(dt);
     this.updateArenaGimmick(dt);
     this.resolveCollisions();
+    this.updatePinRescue(dt);
     this.updateFeed(dt);
     this.updateCallouts();
     this.updateEngines();
@@ -624,10 +626,30 @@ export default class BattleScene extends Phaser.Scene {
     const b = this.bounds; // shrinks during sudden death
     const l = b.x + r; const rt = b.x + b.w - r;
     const tp = b.y + r; const bt = b.y + b.h - r;
-    if (kart.x < l) { kart.x = l; if (kart.vx < 0) kart.vx *= -0.4; kart.speed *= 0.7; }
-    else if (kart.x > rt) { kart.x = rt; if (kart.vx > 0) kart.vx *= -0.4; kart.speed *= 0.7; }
-    if (kart.y < tp) { kart.y = tp; if (kart.vy < 0) kart.vy *= -0.4; kart.speed *= 0.7; }
-    else if (kart.y > bt) { kart.y = bt; if (kart.vy > 0) kart.vy *= -0.4; kart.speed *= 0.7; }
+    // The speed penalty scales with how head-on the contact is: ramming a wall
+    // still costs ~30% speed, but sliding along one is nearly free — so a kart
+    // can actually drive its way out of a corner.
+    const sp = Math.hypot(kart.vx, kart.vy) || 1;
+    if (kart.x < l) { kart.x = l; if (kart.vx < 0) { kart.speed *= 1 - 0.3 * (-kart.vx / sp); kart.vx *= -0.4; } }
+    else if (kart.x > rt) { kart.x = rt; if (kart.vx > 0) { kart.speed *= 1 - 0.3 * (kart.vx / sp); kart.vx *= -0.4; } }
+    if (kart.y < tp) { kart.y = tp; if (kart.vy < 0) { kart.speed *= 1 - 0.3 * (-kart.vy / sp); kart.vy *= -0.4; } }
+    else if (kart.y > bt) { kart.y = bt; if (kart.vy > 0) { kart.speed *= 1 - 0.3 * (kart.vy / sp); kart.vy *= -0.4; } }
+  }
+
+  // Is this kart pressed against the arena edge, an inner wall, or a pillar?
+  againstWall(k) {
+    const bd = this.bounds;
+    const r = k.radius;
+    if (k.x <= bd.x + r + 1 || k.x >= bd.x + bd.w - r - 1 || k.y <= bd.y + r + 1 || k.y >= bd.y + bd.h - r - 1) return true;
+    for (const b of this.blocks) {
+      if ((k.x - b.x) ** 2 + (k.y - b.y) ** 2 <= (r + b.r + 1) ** 2) return true;
+    }
+    for (const w of this.walls) {
+      const cx = Phaser.Math.Clamp(k.x, w.x, w.x + w.w);
+      const cy = Phaser.Math.Clamp(k.y, w.y, w.y + w.h);
+      if ((k.x - cx) ** 2 + (k.y - cy) ** 2 <= (r + 1) ** 2) return true;
+    }
+    return false;
   }
 
   // Push a kart out of inner blocks (circles) and walls (rects).
@@ -1030,6 +1052,51 @@ export default class BattleScene extends Phaser.Scene {
     }
   }
 
+  // Anti-pinning rescue: a kart wedged between a wall and a rival with no
+  // speed for ~1.6s gets a free pop to open ground. Nobody can be held in a
+  // corner indefinitely.
+  updatePinRescue(dt) {
+    for (const k of this.karts) {
+      if (k.out) { k.pinnedTime = 0; continue; }
+      const rival = this.karts.find((o) => o !== k && !o.out
+        && ((o.x - k.x) ** 2 + (o.y - k.y) ** 2) < (o.radius + k.radius + 4) ** 2);
+      if (rival && Math.abs(k.speed) < 45 && this.againstWall(k)) {
+        k.pinnedTime += dt;
+        if (k.pinnedTime > 1.6) {
+          k.pinnedTime = 0;
+          this.rescuePinned(k, rival);
+        }
+      } else {
+        k.pinnedTime = Math.max(0, k.pinnedTime - dt * 2);
+      }
+    }
+  }
+
+  rescuePinned(k, rival) {
+    const bd = this.bounds;
+    const r = k.radius;
+    // Try a hop in each cardinal direction; take the spot that's clear of the
+    // arena furniture and farthest from the pinning rival.
+    let best = null;
+    let bestScore = -1;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const x = Phaser.Math.Clamp(k.x + dx * 80, bd.x + r, bd.x + bd.w - r);
+      const y = Phaser.Math.Clamp(k.y + dy * 80, bd.y + r, bd.y + bd.h - r);
+      if (this.blocked(x, y, r)) continue;
+      const score = Math.hypot(x - rival.x, y - rival.y) + Math.hypot(x - k.x, y - k.y) * 0.5;
+      if (score > bestScore) { bestScore = score; best = { x, y }; }
+    }
+    if (!best) return;
+    this.burst(k.x, k.y, 0x9fe8ff);
+    k.x = best.x;
+    k.y = best.y;
+    k.knockX = 0;
+    k.knockY = 0;
+    this.burst(k.x, k.y, 0x9fe8ff);
+    this.floatPopup(k.x, k.y - 26, 'FREED!', '#9fe8ff');
+    if (!k.isAI) Audio.sfx('jump');
+  }
+
   resolveCollisions() {
     for (let i = 0; i < this.karts.length; i += 1) {
       for (let j = i + 1; j < this.karts.length; j += 1) {
@@ -1062,11 +1129,24 @@ export default class BattleScene extends Phaser.Scene {
       }
       return;
     }
-    a.x -= (nx * overlap) / 2; a.y -= (ny * overlap) / 2;
-    b.x += (nx * overlap) / 2; b.y += (ny * overlap) / 2;
+    // Wall-aware separation: a kart pressed against a wall can't be squeezed
+    // any further, so the free kart absorbs the WHOLE separation + push. This
+    // stops one kart from grinding another into the arena edge.
     const push = 150 + (a.speed + b.speed) * 0.25;
-    a.knockX -= nx * push * 0.5; a.knockY -= ny * push * 0.5;
-    b.knockX += nx * push * 0.5; b.knockY += ny * push * 0.5;
+    const aWalled = this.againstWall(a);
+    const bWalled = this.againstWall(b);
+    if (aWalled && !bWalled) {
+      b.x += nx * overlap; b.y += ny * overlap;
+      b.knockX += nx * push; b.knockY += ny * push;
+    } else if (bWalled && !aWalled) {
+      a.x -= nx * overlap; a.y -= ny * overlap;
+      a.knockX -= nx * push; a.knockY -= ny * push;
+    } else {
+      a.x -= (nx * overlap) / 2; a.y -= (ny * overlap) / 2;
+      b.x += (nx * overlap) / 2; b.y += (ny * overlap) / 2;
+      a.knockX -= nx * push * 0.5; a.knockY -= ny * push * 0.5;
+      b.knockX += nx * push * 0.5; b.knockY += ny * push * 0.5;
+    }
     if (!a.isAI || !b.isAI) Audio.sfx('bump');
     // Ramming a spun-out rival steals one of their balloons (once per spin).
     if (a.spunOut !== b.spunOut) {
