@@ -78,14 +78,15 @@ export default class ResultsScene extends Phaser.Scene {
       // Kart + name.
       const kart = this.add.image(mx + 70, 0, `kart_${r.id}`).setScale(1.2);
       container.add(kart);
-      container.add(this.add.text(mx + 110, 0, `${ORD[i]}   ${r.name}`, {
+      container.add(this.add.text(mx + 110, 0, `${ORD[i]}  ${r.name}`, {
         fontFamily: 'monospace', fontSize: '22px', fontStyle: 'bold',
         color: Phaser.Display.Color.IntegerToColor(r.color).rgba,
       }).setOrigin(0, 0.5));
 
-      // Best-lap readout (gold + a ⚡ for the race's fastest lap).
+      // Best-lap readout (gold + a ⚡ for the race's fastest lap). Sits right
+      // of the name column — keep clear of 6-letter names like "Yellow".
       const isFastest = fastest != null && r.bestLap === fastest;
-      const lapX = 36;
+      const lapX = 62;
       container.add(this.add.text(lapX, -12, isFastest ? '⚡ FASTEST LAP' : 'BEST LAP', {
         fontFamily: 'monospace', fontSize: '11px', color: isFastest ? '#ffe14d' : '#9aa0b4', fontStyle: 'bold',
       }).setOrigin(0, 0.5));

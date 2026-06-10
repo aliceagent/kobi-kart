@@ -387,8 +387,8 @@ export default class TutorialScene extends Phaser.Scene {
 
   showItemList(step) {
     const many = step.items.length > 7;
-    const startY = many ? 80 : 96;
-    const rowH = many ? 36 : 42;
+    const startY = many ? 76 : 96;
+    const rowH = many ? 30 : 42; // dense list must stay inside the 360px panel
     const x = 84;
     const fontSize = many ? 14 : 16;
     step.items.forEach((it, i) => {

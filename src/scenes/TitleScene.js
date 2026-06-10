@@ -49,15 +49,15 @@ export default class TitleScene extends Phaser.Scene {
         color: this.psychedelic ? '#ffffff' : '#11364f', fontStyle: 'bold',
       }).setOrigin(0.5).setDepth(20);
 
-    this.add.text(W / 2, H * 0.355,
+    this.add.text(W / 2, H * 0.335,
       '💨 hold BRAKE while turning to DRIFT — release for a mini-boost!', {
         fontFamily: 'monospace', fontSize: '13px', color: '#ffffff', fontStyle: 'bold',
         stroke: '#11364f', strokeThickness: 4,
       }).setOrigin(0.5).setDepth(20);
 
-    this.makeButton(W / 2, H * 0.40, '1 PLAYER', 0xff4d4d, () => this.startGame(1), { h: 50 });
-    this.makeButton(W / 2, H * 0.50, '2 PLAYERS', 0x4d8bff, () => this.startGame(2), { h: 50 });
-    this.makeButton(W / 2, H * 0.60, '⚔ BATTLE', 0xff8a2c, () => this.startBattle(), { h: 50 });
+    this.makeButton(W / 2, H * 0.425, '1 PLAYER', 0xff4d4d, () => this.startGame(1), { h: 50 });
+    this.makeButton(W / 2, H * 0.52, '2 PLAYERS', 0x4d8bff, () => this.startGame(2), { h: 50 });
+    this.makeButton(W / 2, H * 0.615, '⚔ BATTLE', 0xff8a2c, () => this.startBattle(), { h: 50 });
 
     this.makeButton(W / 2 - 162, H * 0.70, 'HOW TO PLAY', 0x2fa86a,
       () => transitionTo(this, 'TutorialScene'), { w: 300, h: 44, fontSize: 18 });
@@ -213,8 +213,10 @@ export default class TitleScene extends Phaser.Scene {
     g.fillStyle(0x7ec850, 1); g.fillRect(0, horizon, W, H - horizon);
     g.fillStyle(0x88d35a, 1); g.fillRect(0, horizon, W, 8);
 
-    // Grandstand + crowd, roadside trees and tyre stacks.
-    this.drawGrandstand(g, W, roadTop - 8);
+    // Grandstand + crowd, roadside trees and tyre stacks. The stand sits off to
+    // the left so the menu buttons never overlap it (a structure poking out
+    // from behind a button reads as a glitch).
+    this.drawGrandstand(g, W * 0.17, roadTop - 8);
     this.drawTree(g, 56, roadTop - 14, 1.0);
     this.drawTree(g, W - 54, roadTop - 10, 1.15);
     this.drawTyreStack(g, 118, roadTop - 13);
@@ -290,9 +292,9 @@ export default class TitleScene extends Phaser.Scene {
     }
   }
 
-  drawGrandstand(g, W, baseY) {
+  drawGrandstand(g, cx, baseY) {
     const sw = 300; const sh = 56;
-    const sx = W / 2 - sw / 2; const sy = baseY - sh;
+    const sx = cx - sw / 2; const sy = baseY - sh;
     g.fillStyle(0x3a4a8c, 1); g.fillRect(sx - 12, sy - 12, sw + 24, 14); // roof
     g.fillStyle(0x6f7794, 1); g.fillRect(sx, sy, sw, sh); // stand
     const cols = [0xff5d8f, 0x4d8bff, 0xffd23f, 0x57c75a, 0xb06bff, 0xffffff, 0xff8a3c];

@@ -89,7 +89,9 @@ export default class CeremonyScene extends Phaser.Scene {
       kart.rotation = -Math.PI / 2;
       this.tweens.add({ targets: kart, y: top - 44, duration: 650, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
 
-      this.add.text(slot.x, top - 66, racer.name, {
+      // The champion's kart is bigger and wears the trophy, so their name sits
+      // above the trophy instead of behind it.
+      this.add.text(slot.x, slot.rank === 1 ? top - 134 : top - 66, racer.name, {
         fontFamily: 'monospace', fontSize: '16px', fontStyle: 'bold',
         color: Phaser.Display.Color.IntegerToColor(racer.color).rgba,
       }).setOrigin(0.5).setDepth(12);
