@@ -27,6 +27,7 @@ export default class BattleSetupScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     this.selected = 0;
+    this.players = 2;
     this.aiCount = 2;
     this.cards = [];
     const cw = 200;
@@ -53,13 +54,27 @@ export default class BattleSetupScene extends Phaser.Scene {
         .on('pointerdown', () => { this.selected = i; Audio.sfx('pickup'); this.redraw(); });
     });
 
-    // AI count selector.
-    this.add.text(W / 2, H * 0.66, 'AI OPPONENTS', {
+    // Player + AI count selectors, side by side.
+    this.add.text(W * 0.32, H * 0.66, 'PLAYERS', {
+      fontFamily: 'monospace', fontSize: '18px', color: '#ffffff', fontStyle: 'bold', stroke: '#000000', strokeThickness: 4,
+    }).setOrigin(0.5);
+    this.playerButtons = [];
+    [1, 2].forEach((nval, i) => {
+      const x = W * 0.32 + (i === 0 ? -70 : 70);
+      const y = H * 0.74;
+      const g = this.add.graphics();
+      const label = this.add.text(x, y, String(nval), { fontFamily: 'monospace', fontSize: '28px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5);
+      this.playerButtons.push({ nval, x, y, g, label });
+      this.add.zone(x, y, 92, 52).setInteractive({ useHandCursor: true })
+        .on('pointerover', () => { this.players = nval; Audio.sfx('beep'); this.redraw(); })
+        .on('pointerdown', () => { this.players = nval; Audio.sfx('pickup'); this.redraw(); });
+    });
+    this.add.text(W * 0.68, H * 0.66, 'AI OPPONENTS', {
       fontFamily: 'monospace', fontSize: '18px', color: '#ffffff', fontStyle: 'bold', stroke: '#000000', strokeThickness: 4,
     }).setOrigin(0.5);
     this.aiButtons = [];
     [2, 4].forEach((nval, i) => {
-      const x = W / 2 + (i === 0 ? -70 : 70);
+      const x = W * 0.68 + (i === 0 ? -70 : 70);
       const y = H * 0.74;
       const g = this.add.graphics();
       const label = this.add.text(x, y, String(nval), { fontFamily: 'monospace', fontSize: '28px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5);
@@ -68,7 +83,7 @@ export default class BattleSetupScene extends Phaser.Scene {
         .on('pointerover', () => { this.aiCount = nval; Audio.sfx('beep'); this.redraw(); })
         .on('pointerdown', () => { this.aiCount = nval; Audio.sfx('pickup'); this.redraw(); });
     });
-    this.add.text(W / 2, H * 0.79, '(2 humans always — couch battle)', {
+    this.add.text(W / 2, H * 0.805, 'solo players can drive with either control set', {
       fontFamily: 'monospace', fontSize: '12px', color: '#cdbfff', stroke: '#000000', strokeThickness: 2,
     }).setOrigin(0.5);
 
@@ -105,13 +120,14 @@ export default class BattleSetupScene extends Phaser.Scene {
       c.g.lineStyle(sel ? 5 : 3, sel ? 0xffe14d : 0xffffff, sel ? 1 : 0.4); c.g.strokeRoundedRect(c.x - c.cw / 2, c.cy - c.ch / 2, c.cw, c.ch, 16);
       c.name.setColor(sel ? '#ffe14d' : '#ffffff');
     });
-    this.aiButtons.forEach((b) => {
-      const sel = b.nval === this.aiCount;
+    const drawToggle = (b, sel, color) => {
       b.g.clear();
       b.g.fillStyle(0x000000, 0.4); b.g.fillRoundedRect(b.x - 46 + 3, b.y - 26 + 4, 92, 52, 12);
-      b.g.fillStyle(sel ? 0xff8a2c : 0x3a2f55, 1); b.g.fillRoundedRect(b.x - 46, b.y - 26, 92, 52, 12);
-      b.g.lineStyle(sel ? 4 : 2, sel ? 0xffffff : 0xffffff, sel ? 1 : 0.4); b.g.strokeRoundedRect(b.x - 46, b.y - 26, 92, 52, 12);
-    });
+      b.g.fillStyle(sel ? color : 0x3a2f55, 1); b.g.fillRoundedRect(b.x - 46, b.y - 26, 92, 52, 12);
+      b.g.lineStyle(sel ? 4 : 2, 0xffffff, sel ? 1 : 0.4); b.g.strokeRoundedRect(b.x - 46, b.y - 26, 92, 52, 12);
+    };
+    this.playerButtons.forEach((b) => drawToggle(b, b.nval === this.players, 0x4d8bff));
+    this.aiButtons.forEach((b) => drawToggle(b, b.nval === this.aiCount, 0xff8a2c));
   }
 
   makeButton(x, y, label, color, onClick, w, h) {
@@ -148,6 +164,8 @@ export default class BattleSetupScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-D', () => { this.selected = (this.selected + 1) % ARENAS.length; Audio.sfx('beep'); this.redraw(); });
     this.input.keyboard.on('keydown-UP', () => { this.aiCount = this.aiCount === 2 ? 4 : 2; Audio.sfx('beep'); this.redraw(); });
     this.input.keyboard.on('keydown-DOWN', () => { this.aiCount = this.aiCount === 2 ? 4 : 2; Audio.sfx('beep'); this.redraw(); });
+    this.input.keyboard.on('keydown-ONE', () => { this.players = 1; Audio.sfx('beep'); this.redraw(); });
+    this.input.keyboard.on('keydown-TWO', () => { this.players = 2; Audio.sfx('beep'); this.redraw(); });
     this.input.keyboard.on('keydown-ENTER', () => this.startBattle());
     this.input.keyboard.on('keydown-SPACE', () => this.startBattle());
   }
@@ -157,6 +175,6 @@ export default class BattleSetupScene extends Phaser.Scene {
     this._starting = true;
     Audio.sfx('pickup');
     const arena = ARENAS[this.selected].id;
-    transitionTo(this, 'CharacterSelectScene', { mode: 'battle', playerCount: 2, arena, aiCount: this.aiCount });
+    transitionTo(this, 'CharacterSelectScene', { mode: 'battle', playerCount: this.players, arena, aiCount: this.aiCount });
   }
 }

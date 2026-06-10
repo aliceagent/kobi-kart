@@ -107,10 +107,12 @@ export default class BattleScene extends Phaser.Scene {
     this.engineOn = true;
     this.events.once('shutdown', () => { Audio.stopMusic(); Audio.stopAllEngines(); });
 
-    this.add.text(W / 2, this.scale.height - 16,
-      'P1 A/D + E/Space   ·   P2 ←/→ + RShift   ·   pop all 3 balloons to win!', {
-        fontFamily: 'monospace', fontSize: '13px', color: '#ffffff', stroke: '#000000', strokeThickness: 3,
-      }).setOrigin(0.5).setDepth(31).setAlpha(0.8);
+    const hint = this.playerCount === 1
+      ? 'steer A/D or ←/→   ·   item E/Space or RShift   ·   pop all 3 balloons to win!'
+      : 'P1 A/D + E/Space   ·   P2 ←/→ + RShift   ·   pop all 3 balloons to win!';
+    this.add.text(W / 2, this.scale.height - 16, hint, {
+      fontFamily: 'monospace', fontSize: '13px', color: '#ffffff', stroke: '#000000', strokeThickness: 3,
+    }).setOrigin(0.5).setDepth(31).setAlpha(0.8);
 
     this.input.keyboard.on('keydown-ESC', () => this.leave('TitleScene'));
     addMuteButton(this);
