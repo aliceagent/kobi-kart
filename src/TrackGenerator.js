@@ -464,5 +464,19 @@ export function generateTrack(width, height, themeName) {
   if (!base) base = fallbackTrack(width, height, halfWidth, roadWidth, twist);
   // Dirt shortcut — not on fatal-void worlds (you'd cut across the abyss).
   const shortcut = theme.offRoad === 'fatal' ? null : findShortcut(base.centerline, halfWidth);
+  // Guard rails are built from the main road alone, so corner fences routinely
+  // cross the shortcut strip and wall it off. Carve those segments out — the
+  // fence simply parts where the dirt passes through.
+  if (shortcut) {
+    const clearHalf = (roadWidth * 0.72) / 2 + 18; // strip half-width + rail/kart clearance
+    base.rails = base.rails.filter((r) => {
+      for (let f = 0; f <= 1; f += 0.2) {
+        const px = r.ax + (r.bx - r.ax) * f;
+        const py = r.ay + (r.by - r.ay) * f;
+        if (distToSegSq(px, py, shortcut.ax, shortcut.ay, shortcut.bx, shortcut.by) < clearHalf * clearHalf) return false;
+      }
+      return true;
+    });
+  }
   return { ...base, theme, shortcut };
 }

@@ -374,7 +374,12 @@ export default class RaceScene extends Phaser.Scene {
   rescueIfStuck(kart, dt) {
     if (kart.finished || kart.falling || kart.airTimer > 0) { kart.stuckTimer = 0; return; }
     if (this.fatalOffRoad) return; // fatal-void worlds handle off-track via falling
-    if (Math.abs(kart.speed) < 45 && !this.isOnRoad(kart.x, kart.y)) {
+    // "Wedged" covers true off-road AND sitting on the dirt shortcut (which
+    // counts as road for speed purposes, but you can still be stuck there —
+    // e.g. parked against the ramp's barrier wall after a failed approach).
+    const onShortcutOnly = this.onShortcut(kart.x, kart.y)
+      && this.minDistSqToCenterline(kart.x, kart.y) > this.halfWidth * this.halfWidth;
+    if (Math.abs(kart.speed) < 45 && (!this.isOnRoad(kart.x, kart.y) || onShortcutOnly)) {
       kart.stuckTimer += dt;
       if (kart.stuckTimer > 2.5) {
         const n = this.centerline.length;
