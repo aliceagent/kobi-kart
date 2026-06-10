@@ -3,72 +3,170 @@
 <head>
 <meta charset="utf-8" />
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 1200px; height: 630px; overflow: hidden; }
-  body {
-    font-family: "Courier New", monospace;
-    position: relative;
-    background: linear-gradient(#5fb8ee 0%, #8ed4f4 48%, #9bdcf6 60%, #7ec850 60%, #74bd46 100%);
-  }
-  .sun {
-    position: absolute; top: 70px; right: 110px; width: 150px; height: 150px;
-    border-radius: 50%; background: radial-gradient(circle at 38% 38%, #ffe884, #ffd23f 70%);
-    box-shadow: 0 0 0 14px rgba(255,225,77,.35), 0 0 60px 10px rgba(255,210,63,.5);
-  }
-  .ray { position: absolute; top: 145px; right: 185px; width: 0; height: 0; }
-  .cloud { position: absolute; background: #fff; border-radius: 40px; opacity: .95; }
-  .c1 { width: 180px; height: 56px; top: 90px; left: 120px; box-shadow: 60px 10px 0 -8px #fff, -55px 12px 0 -12px #fff; }
-  .c2 { width: 130px; height: 44px; top: 150px; left: 360px; box-shadow: 44px 8px 0 -8px #fff, -40px 9px 0 -10px #fff; }
-  .title {
-    position: absolute; top: 150px; left: 0; right: 0; text-align: center;
-    font-size: 150px; font-weight: 900; letter-spacing: 4px;
-    color: #ffe14d; -webkit-text-stroke: 9px #c0392b;
-    paint-order: stroke fill;
-    text-shadow: 0 10px 0 rgba(0,0,0,.18);
-  }
-  .tag {
-    position: absolute; top: 330px; left: 0; right: 0; text-align: center;
-    font-size: 30px; font-weight: 700; color: #12415c;
-  }
-  /* Road strip */
-  .road { position: absolute; bottom: 0; left: 0; width: 100%; height: 150px; background: #4a4a55;
-          border-top: 7px solid #fff; }
-  .dash { position: absolute; bottom: 70px; left: 0; width: 100%; height: 6px;
-          background: repeating-linear-gradient(90deg, #ffe14d 0 44px, transparent 44px 96px); }
-  .finish { position: absolute; bottom: 0; left: 540px; width: 54px; height: 150px;
-            background-image:
-              linear-gradient(45deg, #111 25%, transparent 25%, transparent 75%, #111 75%),
-              linear-gradient(45deg, #111 25%, #fff 25%, #fff 75%, #111 75%);
-            background-size: 27px 27px; background-position: 0 0, 13.5px 13.5px; background-color: #fff; }
-  .kart { position: absolute; bottom: 52px; width: 78px; height: 50px; border-radius: 12px;
-          border: 5px solid #1c1c22; }
-  .kart::after { content:""; position:absolute; right:7px; top:9px; width:18px; height:24px;
-                 background:#bfe9ff; border-radius:5px; }
-  .kred { left: 250px; background: #ff4d4d; }
-  .kblue { left: 360px; bottom: 64px; background: #4d8bff; }
-  .kyellow { left: 720px; background: #ffd23f; }
-  .pill {
-    position: absolute; top: 392px; left: 0; right: 0; text-align: center;
-  }
-  .pill span {
-    display: inline-block; background: #c0392b; color: #fff; font-weight: 800;
-    font-size: 24px; padding: 12px 28px; border-radius: 30px;
-    box-shadow: 0 6px 0 rgba(0,0,0,.2);
-  }
+  * { margin: 0; padding: 0; }
+  html, body { width: 1200px; height: 630px; overflow: hidden; background: #6fb84a; }
 </style>
 </head>
 <body>
-  <div class="sun"></div>
-  <div class="cloud c1"></div>
-  <div class="cloud c2"></div>
-  <div class="title">KOBI KART</div>
-  <div class="tag">2-player couch kart racing · power-ups · procedural tracks</div>
-  <div class="pill"><span>▶  Play free in your browser</span></div>
-  <div class="road"></div>
-  <div class="dash"></div>
-  <div class="finish"></div>
-  <div class="kart kred"></div>
-  <div class="kart kblue"></div>
-  <div class="kart kyellow"></div>
+<!-- Rendered to og.png with headless Chrome:
+     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless \
+       --screenshot=public/og.png --window-size=1200,630 --hide-scrollbars \
+       public/og-card.source.html -->
+<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg" font-family="'Courier New', Courier, monospace">
+  <defs>
+    <!-- Game-accurate top-down kart (46x32 art units), body/trim via CSS vars per use -->
+    <g id="kart">
+      <!-- tyres -->
+      <g fill="#111116">
+        <rect x="5" y="0" width="13" height="9" rx="3"/><rect x="5" y="23" width="13" height="9" rx="3"/>
+        <rect x="31" y="1" width="10" height="8" rx="3"/><rect x="31" y="23" width="10" height="8" rx="3"/>
+      </g>
+      <g fill="#33333c">
+        <rect x="6.5" y="2.9" width="10" height="3.2" rx="2"/><rect x="6.5" y="25.9" width="10" height="3.2" rx="2"/>
+        <rect x="32.5" y="3.6" width="7" height="2.9" rx="2"/><rect x="32.5" y="25.6" width="7" height="2.9" rx="2"/>
+      </g>
+      <!-- rear wing -->
+      <rect x="1" y="4" width="6" height="24" rx="3" fill="#15151b"/>
+      <!-- hull + body inset -->
+      <polygon points="44,16 33,8 13,5 5,8 5,24 13,27 33,24" fill="#14141a"/>
+      <polygon points="40.9,16 31.5,9.6 14.3,7.2 7.4,9.6 7.4,22.4 14.3,24.8 31.5,22.4" fill="var(--body)"/>
+      <!-- trim: nose + stripes -->
+      <g fill="var(--trim)">
+        <polygon points="42,16 33,11 33,21"/>
+        <rect x="13" y="7" width="16" height="2.5"/>
+        <rect x="13" y="22.5" width="16" height="2.5"/>
+      </g>
+      <!-- cockpit + helmet -->
+      <ellipse cx="19" cy="16" rx="8.5" ry="8" fill="#14141a"/>
+      <circle cx="19" cy="16" r="6.6" fill="#0d0d11"/>
+      <circle cx="19" cy="16" r="5.2" fill="var(--trim)"/>
+      <rect x="20.5" y="12.4" width="4" height="7.2" fill="#0d0d11"/>
+      <circle cx="16.8" cy="14" r="1.7" fill="#ffffff" opacity="0.55"/>
+      <!-- nose sheen -->
+      <ellipse cx="31" cy="11" rx="8.5" ry="3.5" fill="#ffffff" opacity="0.16"/>
+    </g>
+    <!-- boost flame -->
+    <g id="flame">
+      <polygon points="0,-7 0,7 -26,0 " fill="#ffd23f" opacity="0.9"/>
+      <polygon points="0,-4 0,4 -16,0" fill="#fff3b0" opacity="0.9"/>
+    </g>
+    <!-- balloon -->
+    <g id="balloon">
+      <path d="M0,14 q3,7 1,13" stroke="#ffffff" stroke-width="1.6" fill="none" opacity="0.8"/>
+      <ellipse cx="0" cy="0" rx="11" ry="13.5" fill="var(--b)"/>
+      <ellipse cx="0" cy="0" rx="11" ry="13.5" fill="none" stroke="#ffffff" stroke-width="2" opacity="0.85"/>
+      <circle cx="-3.5" cy="-4.5" r="2.6" fill="#ffffff" opacity="0.5"/>
+    </g>
+    <!-- item box -->
+    <g id="itembox">
+      <rect x="-19" y="-19" width="38" height="38" rx="9" fill="#49c6ec"/>
+      <rect x="-19" y="-19" width="38" height="38" rx="9" fill="none" stroke="#ffffff" stroke-width="3" opacity="0.9"/>
+      <rect x="-13" y="-13" width="26" height="13" rx="6" fill="#9fe8ff" opacity="0.65"/>
+      <path d="M0,-10 L2.8,-3 L10,-3 L4.2,1.6 L6.5,9 L0,4.6 L-6.5,9 L-4.2,1.6 L-10,-3 L-2.8,-3 Z" fill="#ffffff"/>
+    </g>
+    <!-- coin -->
+    <g id="coin">
+      <circle r="9" fill="#e8a92a"/><circle r="9" fill="#ffd23f" stroke="#b07d12" stroke-width="1.6"/>
+      <circle r="5.4" fill="none" stroke="#b07d12" stroke-width="1.6" opacity="0.8"/>
+    </g>
+    <filter id="dropsh" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="5" stdDeviation="0" flood-color="#000000" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+  <style>
+    .kred { --body:#ff4d4d; --trim:#ffe14d; }
+    .kblue { --body:#4d8bff; --trim:#ffffff; }
+    .kyellow { --body:#ffd23f; --trim:#1c1c22; }
+    .kgreen { --body:#57c75a; --trim:#ffffff; }
+    .bpink { --b:#ff5d8f; } .bcyan { --b:#49c6ec; } .byellow { --b:#ffe14d; }
+  </style>
+
+  <!-- ============ grass ============ -->
+  <rect width="1200" height="630" fill="#6fb84a"/>
+  <g opacity="0.06">
+    <ellipse cx="90" cy="120" rx="30" ry="13" fill="#ffffff"/><ellipse cx="300" cy="80" rx="26" ry="11" fill="#000000"/>
+    <ellipse cx="170" cy="320" rx="32" ry="13" fill="#ffffff"/><ellipse cx="80" cy="520" rx="28" ry="12" fill="#000000"/>
+    <ellipse cx="1100" cy="90" rx="30" ry="12" fill="#000000"/><ellipse cx="1130" cy="540" rx="34" ry="14" fill="#ffffff"/>
+    <ellipse cx="960" cy="600" rx="26" ry="11" fill="#ffffff"/><ellipse cx="420" cy="600" rx="30" ry="12" fill="#000000"/>
+    <ellipse cx="620" cy="70" rx="28" ry="12" fill="#ffffff"/>
+  </g>
+
+  <!-- ============ track: a wide sweeping S across the card ============ -->
+  <!-- kerb (red/white) on the two outer corners -->
+  <path d="M -60,395 C 240,395 330,200 600,200 C 870,200 960,430 1260,430"
+        fill="none" stroke="#ffffff" stroke-width="196" stroke-linecap="butt"/>
+  <path d="M -60,395 C 240,395 330,200 600,200 C 870,200 960,430 1260,430"
+        fill="none" stroke="#e23b3b" stroke-width="196" stroke-dasharray="26 26"/>
+  <!-- yellow edge casing -->
+  <path d="M -60,395 C 240,395 330,200 600,200 C 870,200 960,430 1260,430"
+        fill="none" stroke="#ffe14d" stroke-width="180"/>
+  <!-- road -->
+  <path d="M -60,395 C 240,395 330,200 600,200 C 870,200 960,430 1260,430"
+        fill="none" stroke="#46474f" stroke-width="168"/>
+  <!-- subtle road sheen -->
+  <path d="M -60,388 C 240,388 330,193 600,193 C 870,193 960,423 1260,423"
+        fill="none" stroke="#ffffff" stroke-width="52" opacity="0.045"/>
+
+  <!-- coins on the racing line -->
+  <use href="#coin" transform="translate(218,376)"/>
+  <use href="#coin" transform="translate(266,358)"/>
+  <use href="#coin" transform="translate(316,338)"/>
+  <!-- item boxes -->
+  <use href="#itembox" transform="translate(548,212) rotate(12)" filter="url(#dropsh)"/>
+  <use href="#itembox" transform="translate(905,355) rotate(-8)" filter="url(#dropsh)"/>
+
+  <!-- ============ karts ============ -->
+  <!-- blue: mid-corner, drifting, balloons (battle nod) -->
+  <g class="kblue" transform="translate(420,318) rotate(-32)" filter="url(#dropsh)">
+    <g transform="scale(2.1) translate(-22,-16)"><use href="#kart"/></g>
+  </g>
+  <g class="bcyan"><use href="#balloon" transform="translate(394,268)"/></g>
+  <g class="bpink"><use href="#balloon" transform="translate(420,254)"/></g>
+
+  <!-- red: leader, boosting out of the corner -->
+  <g class="kred" transform="translate(760,248) rotate(16)" filter="url(#dropsh)">
+    <use href="#flame" transform="scale(2.1) translate(-24,0)"/>
+    <g transform="scale(2.1) translate(-22,-16)"><use href="#kart"/></g>
+  </g>
+
+  <!-- yellow: chasing on the lower straight -->
+  <g class="kyellow" transform="translate(206,396) rotate(-12)" filter="url(#dropsh)">
+    <g transform="scale(2.0) translate(-22,-16)"><use href="#kart"/></g>
+  </g>
+
+  <!-- green: rounding the far corner -->
+  <g class="kgreen" transform="translate(1010,408) rotate(22)" filter="url(#dropsh)">
+    <g transform="scale(2.0) translate(-22,-16)"><use href="#kart"/></g>
+  </g>
+
+  <g class="byellow"><use href="#balloon" transform="translate(984,352)"/></g>
+
+  <!-- drift sparks behind blue -->
+  <g fill="#9fe8ff">
+    <circle cx="358" cy="352" r="5"/><circle cx="338" cy="366" r="4"/><circle cx="322" cy="380" r="3"/>
+  </g>
+  <!-- skid marks -->
+  <path d="M 330,372 q 40,-22 74,-38" stroke="#101012" stroke-width="5" opacity="0.25" fill="none"/>
+  <path d="M 344,386 q 40,-22 74,-38" stroke="#101012" stroke-width="5" opacity="0.25" fill="none"/>
+
+  <!-- ============ title block ============ -->
+  <g text-anchor="middle">
+    <text x="600" y="118" font-size="124" font-weight="900" letter-spacing="6"
+          fill="#ffe14d" stroke="#c0392b" stroke-width="22" paint-order="stroke" opacity="0.25"
+          transform="translate(0,9)">KOBI KART</text>
+    <text x="600" y="118" font-size="124" font-weight="900" letter-spacing="6"
+          fill="#ffe14d" stroke="#c0392b" stroke-width="16" paint-order="stroke">KOBI KART</text>
+    <text x="600" y="163" font-size="27" font-weight="700" fill="#ffffff"
+          stroke="#10101a" stroke-width="7" paint-order="stroke" letter-spacing="1">2-PLAYER KART RACING · BALLOON BATTLE · ONE KEYBOARD</text>
+  </g>
+
+  <!-- ============ bottom pill ============ -->
+  <g text-anchor="middle">
+    <rect x="330" y="548" width="540" height="58" rx="29" fill="#000000" opacity="0.25" transform="translate(0,5)"/>
+    <rect x="330" y="548" width="540" height="58" rx="29" fill="#c0392b"/>
+    <rect x="336" y="553" width="528" height="24" rx="14" fill="#ffffff" opacity="0.14"/>
+    <text x="600" y="586" font-size="25" font-weight="800" fill="#ffffff">▶ &#160;Play free in your browser</text>
+  </g>
+</svg>
 </body>
 </html>
