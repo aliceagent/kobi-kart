@@ -130,6 +130,10 @@ export default class BattleScene extends Phaser.Scene {
     this.bonusBalloon = null;
     this.balloonTimer = 14;
 
+    // Kill feed (top-left) + "N KARTS LEFT!" callout tracking.
+    this.feed = [];
+    this.prevAlive = this.karts.length;
+
     // Battle AI skill knobs (react = threat-detection range in px, fire =
     // per-frame fire chance when lined up, dodge = chance to evade incoming).
     const diff = this.registry.get('difficulty') || 'medium';
@@ -370,7 +374,7 @@ export default class BattleScene extends Phaser.Scene {
       this.drawDynamic();
       return;
     }
-    if (this.state === 'over') { this.drawHazards(0); this.drawHUD(); this.drawDynamic(); return; }
+    if (this.state === 'over') { this.updateFeed(dt); this.drawHazards(0); this.drawHUD(); this.drawDynamic(); return; }
 
     this.updateMatchTimer(dt);
     this.karts.forEach((k) => {
@@ -389,6 +393,8 @@ export default class BattleScene extends Phaser.Scene {
     this.updateGeysers(dt);
     this.updateArenaGimmick(dt);
     this.resolveCollisions();
+    this.updateFeed(dt);
+    this.updateCallouts();
     this.updateEngines();
     this.updateSkids(dt);
     this.drawHazards(dt);
@@ -689,7 +695,10 @@ export default class BattleScene extends Phaser.Scene {
     this.cameras.main.flash(220, 230, 230, 140);
     for (const r of this.karts) {
       if (r === kart || r.out) continue;
-      if (r.hit()) { this.burst(r.x, r.y, 0xfff3b0); this.popBalloon(r); }
+      if (r.hit()) {
+        this.burst(r.x, r.y, 0xfff3b0);
+        if (this.popBalloon(r, kart.x, kart.y)) this.addFeed(`${kart.name.toUpperCase()}'S BOLT GOT ${r.name.toUpperCase()}`, kart.color);
+      }
     }
   }
 
@@ -803,14 +812,17 @@ export default class BattleScene extends Phaser.Scene {
               // orbiting shells all still defend against it.
               if (k.starTimer > 0) { this.burst(p.x, p.y, 0x9fd6f5); }
               else if (k.shieldTimer > 0) { k.shieldTimer = 0; Audio.sfx('shieldbreak'); this.burst(p.x, p.y, 0x9fe8ff); }
-              else if (!this.orbitBlock(k)) { this.burst(p.x, p.y, k.color); Audio.sfx('hit'); this.popBalloon(k); }
+              else if (!this.orbitBlock(k)) {
+                this.burst(p.x, p.y, k.color); Audio.sfx('hit');
+                if (this.popBalloon(k, p.x, p.y)) this.addFeed(`${p.owner.name.toUpperCase()} DARTED ${k.name.toUpperCase()}`, p.owner.color);
+              }
               dead = true; break;
             }
             if (this.orbitBlock(k)) { dead = true; break; }
             const landed = k.hit();
             this.burst(p.x, p.y, landed ? k.color : 0x9fd6f5);
             Audio.sfx(landed ? 'hit' : 'shieldbreak');
-            if (landed) this.popBalloon(k);
+            if (landed && this.popBalloon(k, p.x, p.y)) this.addFeed(`${p.owner.name.toUpperCase()} POPPED ${k.name.toUpperCase()}`, p.owner.color);
             dead = true; break;
           }
         }
@@ -831,7 +843,10 @@ export default class BattleScene extends Phaser.Scene {
           if ((k.x - t.x) ** 2 + (k.y - t.y) ** 2 < (k.radius + 12) ** 2) {
             const landed = k.hit();
             this.burst(t.x, t.y, 0x15151c); Audio.sfx(landed ? 'hit' : 'shieldbreak');
-            if (landed) { this.popBalloon(k); dead = true; break; }
+            if (landed) {
+              if (this.popBalloon(k, t.x, t.y)) this.addFeed(`${t.owner.name.toUpperCase()}'S SLICK GOT ${k.name.toUpperCase()}`, t.owner.color);
+              dead = true; break;
+            }
           }
         }
       }
@@ -846,7 +861,13 @@ export default class BattleScene extends Phaser.Scene {
       if (gy.phase === 'wait') { if (gy.timer <= 0) { gy.phase = 'warn'; gy.timer = 1.1; } }
       else if (gy.phase === 'warn') { if (gy.timer <= 0) {
         gy.phase = 'erupt'; gy.timer = 0.5; Audio.sfx('hit'); this.cameras.main.shake(150, 0.006);
-        for (const k of this.karts) { if (k.out) continue; if ((k.x - gy.x) ** 2 + (k.y - gy.y) ** 2 < (gy.r + k.radius) ** 2) { if (k.hit()) { this.burst(k.x, k.y, 0xff7a1a); this.popBalloon(k); } } }
+        for (const k of this.karts) {
+          if (k.out) continue;
+          if ((k.x - gy.x) ** 2 + (k.y - gy.y) ** 2 < (gy.r + k.radius) ** 2 && k.hit()) {
+            this.burst(k.x, k.y, 0xff7a1a);
+            if (this.popBalloon(k, gy.x, gy.y)) this.addFeed(`A GEYSER GOT ${k.name.toUpperCase()}`, 0xff7a1a);
+          }
+        }
       } }
       else if (gy.phase === 'erupt') { if (gy.timer <= 0) { gy.phase = 'wait'; gy.timer = 2.2 + Math.random() * 2; } }
     }
@@ -880,7 +901,10 @@ export default class BattleScene extends Phaser.Scene {
           const d = Math.hypot(k.x - s.x, k.y - s.y) || 1;
           k.knockX += ((k.x - s.x) / d) * 320;
           k.knockY += ((k.y - s.y) / d) * 320;
-          if (k.hit()) { this.burst(k.x, k.y, 0xffffff); Audio.sfx('hit'); this.popBalloon(k); }
+          if (k.hit()) {
+            this.burst(k.x, k.y, 0xffffff); Audio.sfx('hit');
+            if (this.popBalloon(k, s.x, s.y)) this.addFeed(`THE SNOWBALL GOT ${k.name.toUpperCase()}`, 0xffffff);
+          }
         }
       }
     }
@@ -924,7 +948,10 @@ export default class BattleScene extends Phaser.Scene {
           if (k.out || k.battleInvuln > 0) continue;
           if (Math.abs(k.x - L.x) < L.w / 2 + k.radius) {
             k.knockX += L.dir * 260;
-            if (k.hit()) { this.burst(k.x, k.y, 0xff7a1a); Audio.sfx('hit'); this.popBalloon(k); }
+            if (k.hit()) {
+              this.burst(k.x, k.y, 0xff7a1a); Audio.sfx('hit');
+              if (this.popBalloon(k, L.x, k.y)) this.addFeed(`THE LAVA GOT ${k.name.toUpperCase()}`, 0xff7a1a);
+            }
           }
         }
         if ((L.dir > 0 && L.x > bd.x + bd.w + L.w) || (L.dir < 0 && L.x < bd.x - L.w)) {
@@ -1012,7 +1039,9 @@ export default class BattleScene extends Phaser.Scene {
         victim.knockX += nx * sign * 340; victim.knockY += ny * sign * 340;
         this.burst(victim.x, victim.y, 0xffe14d); Audio.sfx('hit');
         // A star contact steals the balloon when there's room for it.
-        if (!this.stealBalloon(thief, victim, true)) this.popBalloon(victim);
+        if (!this.stealBalloon(thief, victim, true) && this.popBalloon(victim, thief.x, thief.y)) {
+          this.addFeed(`${thief.name.toUpperCase()} POPPED ${victim.name.toUpperCase()}`, thief.color);
+        }
       }
       return;
     }
@@ -1049,6 +1078,8 @@ export default class BattleScene extends Phaser.Scene {
     this.burst(victim.x, victim.y, victim.color);
     this.burst(thief.x, thief.y, 0xffe14d);
     if (!thief.isAI || !victim.isAI) Audio.sfx('coin');
+    if (!victim.isAI) this.hitFlash(thief.x, thief.y, victim);
+    this.addFeed(`${thief.name.toUpperCase()} STOLE FROM ${victim.name.toUpperCase()}`, thief.color);
     this.floatPopup(thief.x, thief.y - 26, 'STOLE!', '#ffe14d');
     this.cameras.main.shake(100, 0.005);
     if (victim.balloons <= 0) this.eliminate(victim);
@@ -1099,15 +1130,76 @@ export default class BattleScene extends Phaser.Scene {
     this.balloonTimer = 6; // centre crowded by arena features — retry shortly
   }
 
-  popBalloon(kart) {
-    if (kart.out || kart.battleInvuln > 0) return;
+  // Pops one balloon. Returns true if a balloon was actually lost (callers use
+  // this to gate kill-feed lines). sx/sy = where the hit came from, for the
+  // directional hit flash on human karts.
+  popBalloon(kart, sx, sy) {
+    if (kart.out || kart.battleInvuln > 0) return false;
     kart.balloons -= 1;
     kart.hitsTaken += 1;
     kart.battleInvuln = 2;
     this.burst(kart.x, kart.y, kart.color);
     this.cameras.main.shake(120, 0.006);
+    if (!kart.isAI) this.hitFlash(sx != null ? sx : kart.x, sy != null ? sy : kart.y, kart);
     if (kart.balloons <= 0) this.eliminate(kart);
     this.checkWin();
+    return true;
+  }
+
+  // A brief red flash on the screen edge the hit came from (human karts only).
+  hitFlash(sx, sy, kart) {
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const dx = sx - kart.x;
+    const dy = sy - kart.y;
+    const g = this.add.graphics().setDepth(48);
+    g.fillStyle(0xff3b30, 0.32);
+    const t = 70;
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      if (dx >= 0) g.fillRect(W - t, 0, t, H); else g.fillRect(0, 0, t, H);
+    } else if (dy >= 0) g.fillRect(0, H - t, W, t);
+    else g.fillRect(0, 0, W, t);
+    this.tweens.add({ targets: g, alpha: 0, duration: 450, onComplete: () => g.destroy() });
+  }
+
+  // ------------------------------------------------------------- kill feed ----
+  addFeed(msg, color) {
+    const hex = `#${color.toString(16).padStart(6, '0')}`;
+    const t = this.add.text(ARENA.x + 6, 0, msg, {
+      fontFamily: 'monospace', fontSize: '13px', color: hex, fontStyle: 'bold',
+      stroke: '#000000', strokeThickness: 3,
+    }).setDepth(32);
+    this.feed.unshift({ t, life: 3 });
+    while (this.feed.length > 4) this.feed.pop().t.destroy();
+    this.layoutFeed();
+  }
+
+  layoutFeed() {
+    this.feed.forEach((f, i) => f.t.setY(ARENA.y + 6 + i * 17));
+  }
+
+  updateFeed(dt) {
+    for (let i = this.feed.length - 1; i >= 0; i -= 1) {
+      const f = this.feed[i];
+      f.life -= dt;
+      if (f.life <= 0) { f.t.destroy(); this.feed.splice(i, 1); this.layoutFeed(); }
+      else if (f.life < 0.8) f.t.setAlpha(f.life / 0.8);
+    }
+  }
+
+  // "3 KARTS LEFT!" / "2 KARTS LEFT!" — once each, as the field thins.
+  updateCallouts() {
+    const alive = this.karts.reduce((c, k) => c + (k.out ? 0 : 1), 0);
+    if (alive < this.prevAlive && this.state === 'battle' && (alive === 3 || alive === 2)) {
+      const t = this.add.text(this.scale.width / 2, this.scale.height * 0.3, `${alive} KARTS LEFT!`, {
+        fontFamily: 'monospace', fontSize: '34px', color: '#ffe14d', fontStyle: 'bold',
+        stroke: '#c0392b', strokeThickness: 7,
+      }).setOrigin(0.5).setDepth(40).setScale(0.5);
+      this.tweens.add({ targets: t, scale: 1, duration: 250, ease: 'Back.Out' });
+      this.tweens.add({ targets: t, alpha: 0, delay: 1100, duration: 400, onComplete: () => t.destroy() });
+      Audio.sfx('lap');
+    }
+    this.prevAlive = alive;
   }
 
   eliminate(kart) {
@@ -1126,6 +1218,7 @@ export default class BattleScene extends Phaser.Scene {
     kart.ghostTarget = this.center();
     this.burst(kart.x, kart.y, kart.color);
     Audio.sfx('zap');
+    this.addFeed(`${kart.name.toUpperCase()} IS OUT!`, kart.color);
     this.floatPopup(kart.x, kart.y - 26, 'GHOST!', '#cdbfff');
   }
 
@@ -1264,6 +1357,11 @@ export default class BattleScene extends Phaser.Scene {
     this.karts.forEach((k, i) => {
       const x = startX + i * slotW;
       g.fillStyle(0x000000, 0.4); g.fillRoundedRect(x - slotW / 2 + 4, y - 13, slotW - 8, 26, 8);
+      // Last balloon: the chip pulses red so everyone knows who's on the edge.
+      if (k.balloons === 1 && !k.out) {
+        g.lineStyle(2.5, 0xff5a5a, 0.4 + 0.5 * Math.sin(this.elapsed * 8));
+        g.strokeRoundedRect(x - slotW / 2 + 4, y - 13, slotW - 8, 26, 8);
+      }
       g.fillStyle(k.color, k.out ? 0.4 : 1); g.fillCircle(x - slotW / 2 + 18, y, 8);
       g.lineStyle(2, 0xffffff, k.out ? 0.4 : 0.9); g.strokeCircle(x - slotW / 2 + 18, y, 8);
       for (let b = 0; b < START_BALLOONS; b += 1) {
