@@ -130,6 +130,15 @@ export default class BattleScene extends Phaser.Scene {
     this.bonusBalloon = null;
     this.balloonTimer = 14;
 
+    // Battle AI skill knobs (react = threat-detection range in px, fire =
+    // per-frame fire chance when lined up, dodge = chance to evade incoming).
+    const diff = this.registry.get('difficulty') || 'medium';
+    this.battleAi = ({
+      easy: { react: 90, fire: 0.02, dodge: 0.4 },
+      medium: { react: 150, fire: 0.04, dodge: 0.75 },
+      hard: { react: 220, fire: 0.07, dodge: 1 },
+    })[diff] || { react: 150, fire: 0.04, dodge: 0.75 };
+
     Audio.resumeAudio();
     Audio.startMusic(this.arena.music || 'Carnival');
     this.engineOn = false;
@@ -429,25 +438,92 @@ export default class BattleScene extends Phaser.Scene {
     this.clampToArena(kart);
   }
 
+  // Decision stack: dodge incoming fire → survive on the last balloon → shop
+  // for items → hunt the leader. Skill knobs come from this.battleAi.
   aiControl(kart, dt) {
     kart.aiTimer -= dt;
-    let tx; let ty; let wantFire = false;
+    const cfg = this.battleAi;
+    const threat = this.incomingThreat(kart, cfg.react);
+
+    // Shield discipline: keep it pocketed until something is actually incoming.
+    let wantFire = kart.heldItem === 'shield' ? !!threat : false;
+
+    // Dodge: break perpendicular to the incoming projectile's flight path.
+    if (threat && Math.random() < cfg.dodge) {
+      const va = Math.atan2(threat.vy, threat.vx);
+      const left = va + Math.PI / 2;
+      const right = va - Math.PI / 2;
+      const dl = Math.abs(Phaser.Math.Angle.Wrap(left - kart.heading));
+      const dr = Math.abs(Phaser.Math.Angle.Wrap(right - kart.heading));
+      const diff = Phaser.Math.Angle.Wrap((dl < dr ? left : right) - kart.heading);
+      return { steer: Phaser.Math.Clamp(diff * 3, -1, 1), braking: false, boosting: true, fire: wantFire };
+    }
+
+    // Survival on the last balloon: limp to the heal, else keep your distance
+    // (with a centre-ward bias so fleeing never pins them against a wall).
+    if (kart.balloons <= 1 && kart.starTimer <= 0) {
+      if (this.bonusBalloon) return this.steerToward(kart, this.bonusBalloon.x, this.bonusBalloon.y, wantFire);
+      const danger = this.nearest(kart, this.karts.filter((k) => k !== kart && !k.out && (k.heldItem || k.starTimer > 0)));
+      if (danger && ((danger.x - kart.x) ** 2 + (danger.y - kart.y) ** 2) < 360 * 360) {
+        const c = this.center();
+        const away = Math.atan2(kart.y - danger.y, kart.x - danger.x);
+        const toC = Math.atan2(c.y - kart.y, c.x - kart.x);
+        const desired = away + Phaser.Math.Angle.Wrap(toC - away) * 0.35;
+        const diff = Phaser.Math.Angle.Wrap(desired - kart.heading);
+        return { steer: Phaser.Math.Clamp(diff * 2.4, -1, 1), braking: false, boosting: true, fire: wantFire };
+      }
+    }
+
+    // Unarmed: go shopping.
     if (!kart.heldItem) {
       const box = this.nearest(kart, this.itemBoxes.filter((b) => b.active));
       const t = box || this.center();
-      tx = t.x; ty = t.y;
-    } else {
-      const foe = this.nearest(kart, this.karts.filter((k) => k !== kart && !k.out));
-      const t = foe || this.center();
-      tx = t.x; ty = t.y;
-      const ang = Math.atan2(ty - kart.y, tx - kart.x);
-      const d = Phaser.Math.Angle.Wrap(ang - kart.heading);
-      if (Math.abs(d) < 0.3 && Math.random() < 0.04) wantFire = true;
+      return this.steerToward(kart, t.x, t.y, false);
     }
+
+    // Armed: hunt the leader (nearest among the most-ballooned rivals).
+    const foe = this.pickTarget(kart) || this.center();
+    if (kart.heldItem !== 'shield') {
+      if (kart.heldItem === 'lightning') {
+        wantFire = Math.random() < cfg.fire; // hits everyone — no aim needed
+      } else {
+        const ang = Math.atan2(foe.y - kart.y, foe.x - kart.x);
+        if (Math.abs(Phaser.Math.Angle.Wrap(ang - kart.heading)) < 0.3 && Math.random() < cfg.fire) wantFire = true;
+      }
+    }
+    return this.steerToward(kart, foe.x, foe.y, wantFire);
+  }
+
+  steerToward(kart, tx, ty, fire) {
     const desired = Math.atan2(ty - kart.y, tx - kart.x);
     const diff = Phaser.Math.Angle.Wrap(desired - kart.heading);
-    const steer = Phaser.Math.Clamp(diff * 2.2, -1, 1);
-    return { steer, braking: false, boosting: Math.abs(diff) < 0.5, fire: wantFire };
+    return { steer: Phaser.Math.Clamp(diff * 2.2, -1, 1), braking: false, boosting: Math.abs(diff) < 0.5, fire: !!fire };
+  }
+
+  // Kill the leader: the nearest rival among those holding the most balloons.
+  pickTarget(kart) {
+    const rivals = this.karts.filter((k) => k !== kart && !k.out);
+    if (!rivals.length) return null;
+    const maxB = Math.max(...rivals.map((k) => k.balloons));
+    return this.nearest(kart, rivals.filter((k) => k.balloons === maxB));
+  }
+
+  // The closest enemy projectile that is closing on this kart (or a red shell
+  // locked onto it), within `range` px.
+  incomingThreat(kart, range) {
+    let best = null; let bd = range * range;
+    for (const p of this.projectiles) {
+      if (p.owner === kart) continue;
+      const dx = kart.x - p.x; const dy = kart.y - p.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 > bd) continue;
+      if (p.homing && p.target === kart) { best = p; bd = d2; continue; }
+      const sp = Math.hypot(p.vx, p.vy) || 1;
+      const dist = Math.sqrt(d2) || 1;
+      const closing = (p.vx * dx + p.vy * dy) / (sp * dist);
+      if (closing > 0.6) { best = p; bd = d2; }
+    }
+    return best;
   }
 
   nearest(kart, list) {
