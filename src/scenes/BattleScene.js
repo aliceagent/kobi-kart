@@ -12,7 +12,15 @@ import { addMuteButton, fadeIn, transitionTo } from '../ui.js';
 
 const ARENA = { x: 36, y: 86, w: 888, h: 518 }; // play field inside the walls
 const START_BALLOONS = 3;
-const ITEM_WEIGHTS = { boost: 3, greenShell: 3, redShell: 2, trap: 2, shield: 2, star: 1 };
+// Base item odds, tweaked per arena (ice favours defence + precision, the maze
+// favours traps + ricochets, the volcano favours speed).
+const ITEM_WEIGHTS = { boost: 3, greenShell: 3, redShell: 2, trap: 2, shield: 2, star: 1, tripleShell: 2, dart: 2, lightning: 0.4 };
+const ARENA_ITEM_TWEAKS = {
+  stadium: { redShell: 3 },
+  ice: { shield: 4, dart: 3 },
+  maze: { trap: 4, greenShell: 4 },
+  volcano: { boost: 4 },
+};
 
 // Feature coords are fractions of the ARENA box; abs() converts them.
 const abs = (fx, fy) => ({ x: ARENA.x + fx * ARENA.w, y: ARENA.y + fy * ARENA.h });
@@ -68,6 +76,13 @@ export default class BattleScene extends Phaser.Scene {
     fadeIn(this);
     makeGameTextures(this);
     ROSTER.forEach((r) => makeKartTexture(this, `kart_${r.id}`, r.color, r.trim));
+    if (!this.textures.exists('dart')) {
+      const dg = this.make.graphics({ x: 0, y: 0, add: false });
+      dg.fillStyle(0xff8a2c, 1); dg.fillRect(0, 4, 7, 4);
+      dg.fillStyle(0xffe14d, 1); dg.fillTriangle(5, 1, 5, 11, 17, 6);
+      dg.generateTexture('dart', 18, 12);
+      dg.destroy();
+    }
 
     this.geysers = [];
     this.blocks = [];
@@ -490,10 +505,12 @@ export default class BattleScene extends Phaser.Scene {
 
   // ---------------------------------------------------------------- items -----
   giveItem(kart) {
-    let total = 0; for (const k in ITEM_WEIGHTS) total += ITEM_WEIGHTS[k];
+    const weights = { ...ITEM_WEIGHTS, ...(ARENA_ITEM_TWEAKS[this.arenaId] || {}) };
+    let total = 0; for (const k in weights) total += weights[k];
     let r = Math.random() * total; let chosen = 'boost';
-    for (const k in ITEM_WEIGHTS) { r -= ITEM_WEIGHTS[k]; if (r <= 0) { chosen = k; break; } }
+    for (const k in weights) { r -= weights[k]; if (r <= 0) { chosen = k; break; } }
     kart.heldItem = chosen;
+    kart.orbitShells = chosen === 'tripleShell' ? 3 : 0;
   }
 
   useItem(kart) {
@@ -505,8 +522,44 @@ export default class BattleScene extends Phaser.Scene {
     else if (item === 'star') { kart.starTimer = 5; Audio.sfx('star'); this.burst(kart.x, kart.y, 0xffe14d); }
     else if (item === 'greenShell') this.spawnProjectile(kart, 'green');
     else if (item === 'redShell') this.spawnProjectile(kart, 'red');
+    else if (item === 'tripleShell') this.spawnProjectile(kart, 'green'); // fires one orbiter
     else if (item === 'trap') this.spawnTrap(kart);
-    kart.heldItem = null;
+    else if (item === 'dart') this.spawnDart(kart);
+    else if (item === 'lightning') this.lightningStrike(kart);
+    // Triple shells keep their slot until the ammo runs out.
+    if (item === 'tripleShell') { kart.orbitShells -= 1; if (kart.orbitShells <= 0) kart.heldItem = null; }
+    else kart.heldItem = null;
+  }
+
+  spawnDart(kart) {
+    if (!kart.isAI) Audio.sfx('shell');
+    const ox = Math.cos(kart.heading); const oy = Math.sin(kart.heading);
+    const sprite = this.add.image(kart.x + ox * 26, kart.y + oy * 26, 'dart').setDepth(13);
+    sprite.rotation = kart.heading;
+    this.projectiles.push({
+      sprite, x: sprite.x, y: sprite.y, vx: ox * 640, vy: oy * 640, speed: 640,
+      owner: kart, homing: false, dart: true, life: 2.5,
+    });
+  }
+
+  // Lightning: zap every rival — spin + pop a balloon unless shield/star saves them.
+  lightningStrike(kart) {
+    Audio.sfx('zap');
+    this.cameras.main.flash(220, 230, 230, 140);
+    for (const r of this.karts) {
+      if (r === kart || r.out) continue;
+      if (r.hit()) { this.burst(r.x, r.y, 0xfff3b0); this.popBalloon(r); }
+    }
+  }
+
+  // Orbiting triple shells physically intercept one incoming shell/dart each.
+  orbitBlock(kart) {
+    if (kart.orbitShells <= 0) return false;
+    kart.orbitShells -= 1;
+    if (kart.orbitShells <= 0 && kart.heldItem === 'tripleShell') kart.heldItem = null;
+    this.burst(kart.x, kart.y, 0x3ecf5a);
+    Audio.sfx('shieldbreak');
+    return true;
   }
 
   spawnProjectile(kart, type) {
@@ -577,8 +630,17 @@ export default class BattleScene extends Phaser.Scene {
         }
       }
       p.x += p.vx * dt; p.y += p.vy * dt;
-      p.sprite.setPosition(p.x, p.y); p.sprite.rotation += dt * 12;
-      if (!p.homing) {
+      p.sprite.setPosition(p.x, p.y);
+      if (p.dart) p.sprite.rotation = Math.atan2(p.vy, p.vx);
+      else p.sprite.rotation += dt * 12;
+      if (p.dart) {
+        // Darts fly straight and shatter on any wall instead of bouncing.
+        const bd = this.bounds;
+        if (p.x < bd.x + 6 || p.x > bd.x + bd.w - 6 || p.y < bd.y + 6 || p.y > bd.y + bd.h - 6) dead = true;
+        if (!dead) { for (const b of this.blocks) { if ((p.x - b.x) ** 2 + (p.y - b.y) ** 2 < (b.r + 6) ** 2) { dead = true; break; } } }
+        if (!dead) { for (const w of this.walls) { if (p.x > w.x - 6 && p.x < w.x + w.w + 6 && p.y > w.y - 6 && p.y < w.y + w.h + 6) { dead = true; break; } } }
+        if (dead) this.burst(p.x, p.y, 0xffe14d);
+      } else if (!p.homing) {
         // Bounce off the (possibly shrunken) arena bounds.
         const bd = this.bounds;
         if (p.x < bd.x + 9) { p.x = bd.x + 9; p.vx = Math.abs(p.vx); }
@@ -595,6 +657,15 @@ export default class BattleScene extends Phaser.Scene {
         for (const k of this.karts) {
           if (k === p.owner || k.out) continue;
           if ((k.x - p.x) ** 2 + (k.y - p.y) ** 2 < (k.radius + 11) ** 2) {
+            if (p.dart) {
+              // Precision hit: pops a balloon with NO spin-out. Star, shield and
+              // orbiting shells all still defend against it.
+              if (k.starTimer > 0) { this.burst(p.x, p.y, 0x9fd6f5); }
+              else if (k.shieldTimer > 0) { k.shieldTimer = 0; Audio.sfx('shieldbreak'); this.burst(p.x, p.y, 0x9fe8ff); }
+              else if (!this.orbitBlock(k)) { this.burst(p.x, p.y, k.color); Audio.sfx('hit'); this.popBalloon(k); }
+              dead = true; break;
+            }
+            if (this.orbitBlock(k)) { dead = true; break; }
             const landed = k.hit();
             this.burst(p.x, p.y, landed ? k.color : 0x9fd6f5);
             Audio.sfx(landed ? 'hit' : 'shieldbreak');
@@ -876,6 +947,17 @@ export default class BattleScene extends Phaser.Scene {
       if (k.shieldTimer > 0) { g.lineStyle(3, 0x9fe8ff, 0.8); g.strokeCircle(k.x, k.y, k.radius + 7); g.fillStyle(0x9fe8ff, 0.12); g.fillCircle(k.x, k.y, k.radius + 7); }
       if (k.starTimer > 0) { const hue = (this.elapsed * 1.4) % 1; k.sprite.setTint(Phaser.Display.Color.HSVToRGB(hue, 0.8, 1).color); } else if (k.sprite.isTinted) k.sprite.clearTint();
       k.sprite.setAlpha(k.battleInvuln > 0 ? (0.4 + 0.4 * Math.sin(this.elapsed * 30)) : 1);
+      // Orbiting triple shells circle the kart while held.
+      if (k.orbitShells > 0) {
+        for (let s = 0; s < k.orbitShells; s += 1) {
+          const a = this.elapsed * 3 + (s / 3) * Math.PI * 2;
+          const sx = k.x + Math.cos(a) * (k.radius + 13);
+          const sy = k.y + Math.sin(a) * (k.radius + 13);
+          g.fillStyle(0x1f8f3f, 1); g.fillCircle(sx, sy, 7);
+          g.fillStyle(0x3ecf5a, 1); g.fillCircle(sx, sy, 5);
+          g.fillStyle(0xffffff, 0.5); g.fillCircle(sx - 2, sy - 2, 1.8);
+        }
+      }
       if ((k.itemBoostTimer > 0 || k.padBoostTimer > 0 || k.boosting) && !k.spunOut) {
         const bx = k.x - Math.cos(k.heading) * 16; const by = k.y - Math.sin(k.heading) * 16;
         const nx = -Math.sin(k.heading); const ny = Math.cos(k.heading);
@@ -904,7 +986,43 @@ export default class BattleScene extends Phaser.Scene {
         g.lineStyle(1.5, 0xffffff, on ? 0.9 : 0.3); g.strokeCircle(bx, y - 1, 6.5);
         g.lineStyle(1.5, 0xffffff, on ? 0.7 : 0.2); g.beginPath(); g.moveTo(bx, y + 5.5); g.lineTo(bx, y + 10); g.strokePath();
       }
+      if (k.heldItem && !k.out) this.drawItemIcon(g, x + slotW / 2 - 18, y, k.heldItem);
     });
+  }
+
+  // Tiny held-item glyphs for the HUD chips (kept crude but readable at 14px).
+  drawItemIcon(g, cx, cy, item) {
+    if (item === 'boost') {
+      g.fillStyle(0xffd23f, 1);
+      g.fillTriangle(cx - 6, cy - 5, cx - 6, cy + 5, cx, cy);
+      g.fillTriangle(cx, cy - 5, cx, cy + 5, cx + 6, cy);
+    } else if (item === 'greenShell' || item === 'tripleShell') {
+      g.fillStyle(0x1f8f3f, 1); g.fillCircle(cx, cy, 6);
+      g.fillStyle(0x3ecf5a, 1); g.fillCircle(cx, cy, 4);
+      if (item === 'tripleShell') { g.fillStyle(0xffffff, 0.95); g.fillCircle(cx + 5, cy - 5, 2.2); }
+    } else if (item === 'redShell') {
+      g.fillStyle(0xc0392b, 1); g.fillCircle(cx, cy, 6);
+      g.fillStyle(0xff5a5a, 1); g.fillCircle(cx, cy, 4);
+    } else if (item === 'trap') {
+      g.fillStyle(0x15151c, 1); g.fillEllipse(cx, cy, 13, 8);
+      g.fillStyle(0x6f6ab0, 0.85); g.fillEllipse(cx - 2, cy - 1, 4, 2.5);
+    } else if (item === 'shield') {
+      g.lineStyle(2, 0x9fe8ff, 1); g.strokeCircle(cx, cy, 6);
+      g.fillStyle(0x9fe8ff, 0.25); g.fillCircle(cx, cy, 6);
+    } else if (item === 'star') {
+      g.fillStyle(0xffe14d, 1);
+      g.fillTriangle(cx - 6, cy + 4, cx + 6, cy + 4, cx, cy - 7);
+      g.fillTriangle(cx - 6, cy - 3, cx + 6, cy - 3, cx, cy + 8);
+    } else if (item === 'dart') {
+      g.fillStyle(0xff8a2c, 1); g.fillRect(cx - 7, cy - 1.5, 5, 3);
+      g.fillStyle(0xffe14d, 1); g.fillTriangle(cx - 3, cy - 4, cx - 3, cy + 4, cx + 7, cy);
+    } else if (item === 'lightning') {
+      g.fillStyle(0xffe14d, 1);
+      g.fillPoints([
+        { x: cx + 2, y: cy - 7 }, { x: cx - 5, y: cy + 1 }, { x: cx - 1, y: cy + 1 },
+        { x: cx - 2, y: cy + 7 }, { x: cx + 5, y: cy - 1 }, { x: cx + 1, y: cy - 1 },
+      ], true);
+    }
   }
 
   burst(x, y, tint) {
