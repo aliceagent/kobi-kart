@@ -69,6 +69,11 @@ export default class BattleScene extends Phaser.Scene {
     this.picks = (cfg.picks && cfg.picks.length) ? cfg.picks.slice() : [0, 1];
     this.arenaId = cfg.arena || 'stadium';
     this.arena = ARENAS.find((a) => a.id === this.arenaId) || ARENAS[0];
+    // Best-of-3 match state lives in the registry so it survives round restarts.
+    this.bo3 = !!cfg.bo3;
+    this.round = cfg.round || 1;
+    if (this.bo3 && this.round === 1) this.registry.set('battleMatch', { wins: {}, stats: {} });
+    this.match = this.bo3 ? (this.registry.get('battleMatch') || { wins: {}, stats: {} }) : null;
   }
 
   create() {
@@ -109,6 +114,16 @@ export default class BattleScene extends Phaser.Scene {
       fontFamily: 'monospace', fontSize: '72px', color: '#ffe14d', fontStyle: 'bold',
       stroke: '#c0392b', strokeThickness: 9,
     }).setOrigin(0.5).setDepth(40);
+
+    // Best-of-3: a brief "ROUND N" intro over the countdown.
+    if (this.bo3) {
+      const ri = this.add.text(W / 2, this.scale.height * 0.28, `ROUND ${this.round}`, {
+        fontFamily: 'monospace', fontSize: '36px', color: '#ffe14d', fontStyle: 'bold',
+        stroke: '#7a3bbf', strokeThickness: 7,
+      }).setOrigin(0.5).setDepth(41).setScale(0.5);
+      this.tweens.add({ targets: ri, scale: 1, duration: 300, ease: 'Back.Out' });
+      this.tweens.add({ targets: ri, alpha: 0, delay: 1600, duration: 400, onComplete: () => ri.destroy() });
+    }
 
     this.state = 'countdown';
     this.countdown = 3.2;
@@ -311,6 +326,7 @@ export default class BattleScene extends Phaser.Scene {
       kart.stealCd = 0; // ram-steal guard: one theft per spin-out
       kart.ghost = false; // eliminated karts haunt the arena instead of vanishing
       kart.teleCd = 0; // maze teleporter cooldown (no ping-ponging)
+      kart.aliveTime = 0; // per-round survival, for the match stats
       this.karts.push(kart);
       if (!kart.isAI) this.humans.push(kart);
     });
@@ -379,6 +395,7 @@ export default class BattleScene extends Phaser.Scene {
     this.updateMatchTimer(dt);
     this.karts.forEach((k) => {
       if (!k.out || k.ghost) k.frozen = false;
+      if (!k.out) k.aliveTime += dt;
       if (k.battleInvuln > 0) k.battleInvuln -= dt;
       if (k.stealCd > 0) k.stealCd -= dt;
       if (k.teleCd > 0) k.teleCd -= dt;
@@ -1232,7 +1249,64 @@ export default class BattleScene extends Phaser.Scene {
     }
   }
 
+  baseCfg(round) {
+    return { playerCount: this.playerCount, picks: this.picks, arena: this.arenaId, aiCount: this.aiCount, bo3: this.bo3, round };
+  }
+
+  // Best-of-3 round end: bank the win + stats, then either advance to the next
+  // round or crown the match champion with a small stats podium.
+  showRoundResults(winner) {
+    const W = this.scale.width; const H = this.scale.height;
+    Audio.sfx('fanfare');
+    const m = this.registry.get('battleMatch') || { wins: {}, stats: {} };
+    m.stats = m.stats || {};
+    this.karts.forEach((k) => {
+      const s = m.stats[k.id] || (m.stats[k.id] = { taken: 0, survival: 0 });
+      s.taken += k.hitsTaken;
+      s.survival += k.aliveTime;
+    });
+    if (winner) m.wins[winner.id] = (m.wins[winner.id] || 0) + 1;
+    this.registry.set('battleMatch', m);
+    this.match = m;
+
+    const dim = this.add.graphics().setDepth(45);
+    dim.fillStyle(0x0a0a16, 0.65); dim.fillRect(0, 0, W, H);
+    this.banner.setDepth(46).setText('');
+    const name = winner ? winner.name.toUpperCase() : 'NOBODY';
+    const matchOver = !!winner && m.wins[winner.id] >= 2;
+    const title = this.add.text(W / 2, H * 0.24, matchOver ? `${name} WINS THE MATCH!` : `${name} TAKES ROUND ${this.round}!`, {
+      fontFamily: 'monospace', fontSize: matchOver ? '42px' : '38px', color: '#ffe14d', fontStyle: 'bold',
+      stroke: '#c0392b', strokeThickness: 8,
+    }).setOrigin(0.5).setDepth(46);
+    this.tweens.add({ targets: title, scale: { from: 0.6, to: 1 }, duration: 400, ease: 'Back.Out' });
+
+    // Standings: wins first, current balloons as the tiebreak.
+    const ranked = this.karts.slice().sort((a, b) => ((m.wins[b.id] || 0) - (m.wins[a.id] || 0)) || (b.balloons - a.balloons));
+    ranked.forEach((k, i) => {
+      const wins = m.wins[k.id] || 0;
+      const s = m.stats[k.id] || { taken: 0, survival: 0 };
+      const pips = '●'.repeat(wins) + '○'.repeat(Math.max(0, 2 - wins));
+      this.add.text(W / 2, H * 0.36 + i * 29,
+        `${pips}  ${k.name.toUpperCase().padEnd(7)} ${s.taken} hits taken · ${Math.round(s.survival)}s alive`, {
+          fontFamily: 'monospace', fontSize: '16px', color: i === 0 ? '#ffe14d' : '#ffffff', fontStyle: 'bold',
+          stroke: '#000000', strokeThickness: 3,
+        }).setOrigin(0.5).setDepth(46);
+    });
+
+    const by = Math.min(H * 0.36 + ranked.length * 29 + 46, H - 50);
+    if (matchOver) {
+      this.makeResultButton(W / 2 - 130, by, 'REMATCH ▶', 0x57c75a, () => {
+        this.registry.set('battleMatch', null);
+        transitionTo(this, 'BattleScene', this.baseCfg(1));
+      });
+    } else {
+      this.makeResultButton(W / 2 - 130, by, 'NEXT ROUND ▶', 0x57c75a, () => transitionTo(this, 'BattleScene', this.baseCfg(this.round + 1)));
+    }
+    this.makeResultButton(W / 2 + 130, by, 'TITLE', 0x4d8bff, () => this.leave('TitleScene'));
+  }
+
   showResults(winner) {
+    if (this.bo3) { this.showRoundResults(winner); return; }
     const W = this.scale.width; const H = this.scale.height;
     Audio.sfx('fanfare');
     const dim = this.add.graphics().setDepth(45);
@@ -1373,6 +1447,16 @@ export default class BattleScene extends Phaser.Scene {
       }
       if (k.ghost) this.drawGhostIcon(g, x + slotW / 2 - 18, y);
       else if (k.heldItem && !k.out) this.drawItemIcon(g, x + slotW / 2 - 18, y, k.heldItem);
+      // Best-of-3: gold win pips under the chip.
+      if (this.bo3) {
+        const wn = (this.match && this.match.wins && this.match.wins[k.id]) || 0;
+        for (let p = 0; p < 2; p += 1) {
+          g.fillStyle(p < wn ? 0xffe14d : 0x2a2a33, p < wn ? 1 : 0.8);
+          g.fillCircle(x - slotW / 2 + 13 + p * 11, y + 19, 3.5);
+          g.lineStyle(1, 0xffffff, p < wn ? 0.8 : 0.3);
+          g.strokeCircle(x - slotW / 2 + 13 + p * 11, y + 19, 3.5);
+        }
+      }
     });
   }
 

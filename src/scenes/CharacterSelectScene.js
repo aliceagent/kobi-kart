@@ -17,6 +17,7 @@ export default class CharacterSelectScene extends Phaser.Scene {
     this.battle = !!(data && data.mode === 'battle');
     this.battleArena = (data && data.arena) || 'stadium';
     this.battleAiCount = (data && data.aiCount) || 2;
+    this.battleBo3 = !!(data && data.bo3);
   }
 
   create() {
@@ -274,7 +275,7 @@ export default class CharacterSelectScene extends Phaser.Scene {
   start() {
     this.cameras.main.flash(250, 255, 255, 255);
     if (this.battle) {
-      const cfg = { playerCount: this.playerCount, picks: this.picks.slice(), arena: this.battleArena, aiCount: this.battleAiCount };
+      const cfg = { playerCount: this.playerCount, picks: this.picks.slice(), arena: this.battleArena, aiCount: this.battleAiCount, bo3: this.battleBo3 };
       this.registry.set('battle', cfg);
       this.time.delayedCall(260, () => transitionTo(this, 'BattleScene', cfg));
       return;

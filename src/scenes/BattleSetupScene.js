@@ -29,6 +29,7 @@ export default class BattleSetupScene extends Phaser.Scene {
     this.selected = 0;
     this.players = 2;
     this.aiCount = 2;
+    this.bo3 = false;
     this.cards = [];
     const cw = 200;
     const ch = 196;
@@ -54,35 +55,31 @@ export default class BattleSetupScene extends Phaser.Scene {
         .on('pointerdown', () => { this.selected = i; Audio.sfx('pickup'); this.redraw(); });
     });
 
-    // Player + AI count selectors, side by side.
-    this.add.text(W * 0.32, H * 0.66, 'PLAYERS', {
-      fontFamily: 'monospace', fontSize: '18px', color: '#ffffff', fontStyle: 'bold', stroke: '#000000', strokeThickness: 4,
+    // Players / AI / match-length selectors, three groups across.
+    const groupLabel = (x, txt) => this.add.text(x, H * 0.66, txt, {
+      fontFamily: 'monospace', fontSize: '17px', color: '#ffffff', fontStyle: 'bold', stroke: '#000000', strokeThickness: 4,
     }).setOrigin(0.5);
+    const makeToggle = (list, x, w, val, label, fontSize, onPick) => {
+      const y = H * 0.74;
+      const g = this.add.graphics();
+      const t = this.add.text(x, y, label, { fontFamily: 'monospace', fontSize, color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5);
+      list.push({ val, x, y, w, g, label: t });
+      this.add.zone(x, y, w, 52).setInteractive({ useHandCursor: true })
+        .on('pointerover', () => { onPick(val); Audio.sfx('beep'); this.redraw(); })
+        .on('pointerdown', () => { onPick(val); Audio.sfx('pickup'); this.redraw(); });
+    };
+    groupLabel(W * 0.2, 'PLAYERS');
     this.playerButtons = [];
-    [1, 2].forEach((nval, i) => {
-      const x = W * 0.32 + (i === 0 ? -70 : 70);
-      const y = H * 0.74;
-      const g = this.add.graphics();
-      const label = this.add.text(x, y, String(nval), { fontFamily: 'monospace', fontSize: '28px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5);
-      this.playerButtons.push({ nval, x, y, g, label });
-      this.add.zone(x, y, 92, 52).setInteractive({ useHandCursor: true })
-        .on('pointerover', () => { this.players = nval; Audio.sfx('beep'); this.redraw(); })
-        .on('pointerdown', () => { this.players = nval; Audio.sfx('pickup'); this.redraw(); });
-    });
-    this.add.text(W * 0.68, H * 0.66, 'AI OPPONENTS', {
-      fontFamily: 'monospace', fontSize: '18px', color: '#ffffff', fontStyle: 'bold', stroke: '#000000', strokeThickness: 4,
-    }).setOrigin(0.5);
+    makeToggle(this.playerButtons, W * 0.2 - 60, 92, 1, '1', '28px', (v) => { this.players = v; });
+    makeToggle(this.playerButtons, W * 0.2 + 60, 92, 2, '2', '28px', (v) => { this.players = v; });
+    groupLabel(W * 0.5, 'AI OPPONENTS');
     this.aiButtons = [];
-    [2, 4].forEach((nval, i) => {
-      const x = W * 0.68 + (i === 0 ? -70 : 70);
-      const y = H * 0.74;
-      const g = this.add.graphics();
-      const label = this.add.text(x, y, String(nval), { fontFamily: 'monospace', fontSize: '28px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5);
-      this.aiButtons.push({ nval, x, y, g, label });
-      this.add.zone(x, y, 92, 52).setInteractive({ useHandCursor: true })
-        .on('pointerover', () => { this.aiCount = nval; Audio.sfx('beep'); this.redraw(); })
-        .on('pointerdown', () => { this.aiCount = nval; Audio.sfx('pickup'); this.redraw(); });
-    });
+    makeToggle(this.aiButtons, W * 0.5 - 60, 92, 2, '2', '28px', (v) => { this.aiCount = v; });
+    makeToggle(this.aiButtons, W * 0.5 + 60, 92, 4, '4', '28px', (v) => { this.aiCount = v; });
+    groupLabel(W * 0.8, 'MATCH');
+    this.matchButtons = [];
+    makeToggle(this.matchButtons, W * 0.8 - 62, 112, false, 'SINGLE', '15px', (v) => { this.bo3 = v; });
+    makeToggle(this.matchButtons, W * 0.8 + 62, 112, true, 'BEST 3', '15px', (v) => { this.bo3 = v; });
     this.add.text(W / 2, H * 0.805, 'solo players can drive with either control set', {
       fontFamily: 'monospace', fontSize: '12px', color: '#cdbfff', stroke: '#000000', strokeThickness: 2,
     }).setOrigin(0.5);
@@ -121,13 +118,15 @@ export default class BattleSetupScene extends Phaser.Scene {
       c.name.setColor(sel ? '#ffe14d' : '#ffffff');
     });
     const drawToggle = (b, sel, color) => {
+      const w = b.w || 92;
       b.g.clear();
-      b.g.fillStyle(0x000000, 0.4); b.g.fillRoundedRect(b.x - 46 + 3, b.y - 26 + 4, 92, 52, 12);
-      b.g.fillStyle(sel ? color : 0x3a2f55, 1); b.g.fillRoundedRect(b.x - 46, b.y - 26, 92, 52, 12);
-      b.g.lineStyle(sel ? 4 : 2, 0xffffff, sel ? 1 : 0.4); b.g.strokeRoundedRect(b.x - 46, b.y - 26, 92, 52, 12);
+      b.g.fillStyle(0x000000, 0.4); b.g.fillRoundedRect(b.x - w / 2 + 3, b.y - 26 + 4, w, 52, 12);
+      b.g.fillStyle(sel ? color : 0x3a2f55, 1); b.g.fillRoundedRect(b.x - w / 2, b.y - 26, w, 52, 12);
+      b.g.lineStyle(sel ? 4 : 2, 0xffffff, sel ? 1 : 0.4); b.g.strokeRoundedRect(b.x - w / 2, b.y - 26, w, 52, 12);
     };
-    this.playerButtons.forEach((b) => drawToggle(b, b.nval === this.players, 0x4d8bff));
-    this.aiButtons.forEach((b) => drawToggle(b, b.nval === this.aiCount, 0xff8a2c));
+    this.playerButtons.forEach((b) => drawToggle(b, b.val === this.players, 0x4d8bff));
+    this.aiButtons.forEach((b) => drawToggle(b, b.val === this.aiCount, 0xff8a2c));
+    this.matchButtons.forEach((b) => drawToggle(b, b.val === this.bo3, 0x57c75a));
   }
 
   makeButton(x, y, label, color, onClick, w, h) {
@@ -166,6 +165,7 @@ export default class BattleSetupScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-DOWN', () => { this.aiCount = this.aiCount === 2 ? 4 : 2; Audio.sfx('beep'); this.redraw(); });
     this.input.keyboard.on('keydown-ONE', () => { this.players = 1; Audio.sfx('beep'); this.redraw(); });
     this.input.keyboard.on('keydown-TWO', () => { this.players = 2; Audio.sfx('beep'); this.redraw(); });
+    this.input.keyboard.on('keydown-B', () => { this.bo3 = !this.bo3; Audio.sfx('beep'); this.redraw(); });
     this.input.keyboard.on('keydown-ENTER', () => this.startBattle());
     this.input.keyboard.on('keydown-SPACE', () => this.startBattle());
   }
@@ -175,6 +175,6 @@ export default class BattleSetupScene extends Phaser.Scene {
     this._starting = true;
     Audio.sfx('pickup');
     const arena = ARENAS[this.selected].id;
-    transitionTo(this, 'CharacterSelectScene', { mode: 'battle', playerCount: this.players, arena, aiCount: this.aiCount });
+    transitionTo(this, 'CharacterSelectScene', { mode: 'battle', playerCount: this.players, arena, aiCount: this.aiCount, bo3: this.bo3 });
   }
 }
