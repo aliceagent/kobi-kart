@@ -372,7 +372,10 @@ export default class UIScene extends Phaser.Scene {
 
     const lead = race.humans[0] || race.order[0];
     const lap = Math.min((lead ? lead.lap : 0) + 1, LAPS);
-    const themeName = race.theme ? race.theme.name.toUpperCase() : '';
+    let themeName = race.theme ? race.theme.name.toUpperCase() : '';
+    if (race.weather === 'rain') themeName += ' 🌧';
+    else if (race.weather === 'night') themeName += ' 🌙';
+    if (race.mixedHazard) themeName += ' ⚡';
     const total = race.gp.themeOrder.length;
     this.banner.setText(`RACE ${race.gp.raceIndex + 1}/${total}   ·   ${themeName}   ·   LAP ${lap}/${LAPS}`);
     // Start lights: red bulbs ramp 3→2→1, all flash green on GO. The number

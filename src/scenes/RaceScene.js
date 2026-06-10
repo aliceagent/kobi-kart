@@ -72,6 +72,24 @@ export default class RaceScene extends Phaser.Scene {
     this.ramp = null;
     this.setupShortcutJump();
 
+    // Weather: a per-race modifier. Skipped in the attract demo and on worlds
+    // that bring their own drama (Rainbow/Volcano voids, Neon's darkness).
+    this.weather = 'clear';
+    this.mixedHazard = false;
+    if (!this.attract && !this.fatalOffRoad && !this.lowVis && !this.isRainbow) {
+      const roll = Math.random();
+      if (roll < 0.20) this.weather = 'rain';
+      else if (roll < 0.36) this.weather = 'night';
+      // Hazard mixing: calm worlds occasionally borrow the storm's lightning.
+      if (!this.theme.hazard && Math.random() < 0.15) this.mixedHazard = true;
+      // Test/debug hook: force a specific modifier via the registry.
+      const forced = this.registry.get('forceWeather');
+      if (forced) {
+        this.weather = (forced === 'rain' || forced === 'night') ? forced : 'clear';
+        this.mixedHazard = forced === 'lightning' && !this.theme.hazard;
+      }
+    }
+
     // Per-world road features / hazards (filled by drawTrack + createHazards).
     this.boostPads = [];
     this.oilPatches = [];
@@ -106,6 +124,11 @@ export default class RaceScene extends Phaser.Scene {
     this.projectiles = [];
     this.traps = [];
     this.dynGfx = this.add.graphics().setDepth(15); // shields
+    // Weather rendering: night = dark veil + additive headlight cones above it;
+    // rain = cold tint + diagonal streaks. All drawn per-frame in world space.
+    this.nightGfx = this.weather === 'night' ? this.add.graphics().setDepth(16) : null;
+    this.lightGfx = this.weather === 'night' ? this.add.graphics().setDepth(17).setBlendMode(Phaser.BlendModes.ADD) : null;
+    this.rainGfx = this.weather === 'rain' ? this.add.graphics().setDepth(18) : null;
     this.particles = this.add.particles(0, 0, 'spark', {
       lifespan: 450, speed: { min: 30, max: 120 }, scale: { start: 0.7, end: 0 },
       emitting: false, gravityY: 0,
@@ -1101,6 +1124,7 @@ export default class RaceScene extends Phaser.Scene {
     this.racers.forEach((r) => this.releaseMiniTurbo(r));
     this.racers.forEach((r) => this.applyRoadFeatures(r));
     this.updateHazards(dt);
+    this.drawWeather();
     this.updateMovers(dt);
     this.updateFog(dt);
     this.updateSkids(dt);
@@ -1182,6 +1206,63 @@ export default class RaceScene extends Phaser.Scene {
     }
   }
 
+  // ------------------------------------------------------------- weather ------
+  drawWeather() {
+    const view = this.cameras.main.worldView;
+    if (this.nightGfx) {
+      const g = this.nightGfx;
+      g.clear();
+      g.fillStyle(0x0a0c2e, 0.44);
+      g.fillRect(view.x - 8, view.y - 8, view.width + 16, view.height + 16);
+      const lg = this.lightGfx;
+      lg.clear();
+      for (const r of this.racers) {
+        if (r.falling) continue;
+        const cx = Math.cos(r.heading); const cy = Math.sin(r.heading);
+        const nx = -cy; const ny = cx;
+        const len = 150; const spread = 52;
+        // headlight cone + a soft pool where it lands + a glow on the kart
+        lg.fillStyle(0xffeeb0, 0.17);
+        lg.fillTriangle(
+          r.x + cx * 10 + nx * 7, r.y + cy * 10 + ny * 7,
+          r.x + cx * 10 - nx * 7, r.y + cy * 10 - ny * 7,
+          r.x + cx * len, r.y + cy * len,
+        );
+        lg.fillTriangle(
+          r.x + cx * 10 + nx * 7, r.y + cy * 10 + ny * 7,
+          r.x + cx * 10 - nx * 7, r.y + cy * 10 - ny * 7,
+          r.x + cx * len * 0.96 + nx * spread * 0.5, r.y + cy * len * 0.96 + ny * spread * 0.5,
+        );
+        lg.fillStyle(0xffeeb0, 0.10);
+        lg.fillEllipse(r.x + cx * len * 0.8, r.y + cy * len * 0.8, spread * 1.5, spread);
+        lg.fillStyle(0xfff6d8, 0.12);
+        lg.fillCircle(r.x, r.y, 26);
+      }
+    }
+    if (this.rainGfx) {
+      const g = this.rainGfx;
+      g.clear();
+      // cold wet tint over the view
+      g.fillStyle(0x2c4a6e, 0.10);
+      g.fillRect(view.x - 8, view.y - 8, view.width + 16, view.height + 16);
+      // diagonal streaks: a deterministic grid pattern scrolling with time, so
+      // the drops fall steadily regardless of camera motion
+      g.lineStyle(1.5, 0xbfd9f2, 0.4);
+      const cell = 56;
+      const fall = (this.elapsed * 540) % cell;
+      const x0 = Math.floor(view.x / cell) * cell;
+      const y0 = Math.floor(view.y / cell) * cell;
+      for (let x = x0; x < view.x + view.width + cell; x += cell) {
+        for (let y = y0; y < view.y + view.height + cell; y += cell) {
+          const jx = ((x * 7919 + y * 104729) % 97) / 97 * cell;
+          const jy = ((x * 31 + y * 17) % 89) / 89 * cell;
+          const sx = x + jx - 5; const sy = y + jy + fall;
+          g.beginPath(); g.moveTo(sx, sy); g.lineTo(sx - 5, sy + 14); g.strokePath();
+        }
+      }
+    }
+  }
+
   // --------------------------------------------------------- wind + hazards ---
   // Storm: a gusting crosswind whose strength swells/fades and direction wanders.
   updateWind(dt) {
@@ -1195,8 +1276,9 @@ export default class RaceScene extends Phaser.Scene {
   }
 
   createHazards() {
-    if (this.theme.hazard === 'geyser') this.createGeysers();
-    if (this.theme.hazard === 'lightning') this.lightning = { timer: 2.6, strike: null };
+    const kind = this.theme.hazard || (this.mixedHazard ? 'lightning' : null);
+    if (kind === 'geyser') this.createGeysers();
+    if (kind === 'lightning') this.lightning = { timer: 2.6, strike: null };
   }
 
   // Volcano: lava geysers sit just off the racing line and erupt on a stagger.
@@ -1376,6 +1458,8 @@ export default class RaceScene extends Phaser.Scene {
       grip: t.grip != null ? t.grip : 1,
       capMul: 1,
     };
+    // Rain: the whole track runs wet — looser than tarmac, kinder than ice.
+    if (this.weather === 'rain') terrain.grip = Math.min(terrain.grip, 0.78);
     if (onRoad && this.slowPatches.length) {
       for (const s of this.slowPatches) {
         if ((kart.x - s.x) ** 2 + (kart.y - s.y) ** 2 < s.r * s.r) { terrain.capMul = 0.5; break; }
