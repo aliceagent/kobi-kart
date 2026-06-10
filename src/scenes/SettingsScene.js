@@ -52,15 +52,17 @@ export default class SettingsScene extends Phaser.Scene {
     this.sectionLabel('🏎  CAR SPEED', H * 0.40);
     this.speedRow = this.makeRow(SPEED, 'chevrons', H * 0.53, () => this.carSpeed, (k) => this.pickSpeed(k));
 
-    this.sectionLabel('🔊  VOLUME', H * 0.655);
-    this.makeVolumeControl(H * 0.715);
+    this.sectionLabel('🔊  VOLUME', H * 0.635);
+    this.makeVolumeBar(H * 0.685, 'MASTER', () => Audio.getVolume(), (v) => Audio.setVolume(v));
+    this.makeVolumeBar(H * 0.733, 'MUSIC', () => Audio.getMusicVolume(), (v) => Audio.setMusicVolume(v));
+    this.makeVolumeBar(H * 0.781, 'SFX', () => Audio.getSfxVolume(), (v) => Audio.setSfxVolume(v));
 
-    this.promptText = this.add.text(W / 2, H * 0.775,
+    this.promptText = this.add.text(W / 2, H * 0.832,
       'Click to choose — your picks are saved automatically', {
         fontFamily: 'monospace', fontSize: '14px', color: '#cdbfff', fontStyle: 'bold',
       }).setOrigin(0.5).setDepth(5);
 
-    this.makeBackButton(W / 2, H * 0.85);
+    this.makeBackButton(W / 2, H * 0.905);
     this.add.text(W / 2, H - 20,
       this.fromCharacter ? 'Esc or Back — return to kart select' : 'Esc or Back to return', {
         fontFamily: 'monospace', fontSize: '13px', color: '#ffffff',
@@ -161,48 +163,50 @@ export default class SettingsScene extends Phaser.Scene {
     g.beginPath(); g.moveTo(x - 5, y); g.lineTo(x - 1, y + 5); g.lineTo(x + 6, y - 5); g.strokePath();
   }
 
-  // A clickable segmented volume bar (10 steps) showing the master volume,
-  // colour-graded green→yellow→orange as it rises. Click a segment to set it.
-  makeVolumeControl(cy) {
+  // A clickable segmented volume bar (10 steps), colour-graded green→yellow→
+  // orange as it rises. One each for master, music and SFX.
+  makeVolumeBar(cy, label, get, set) {
     const W = this.scale.width;
     const segs = 10;
-    const segW = 30;
-    const segH = 26;
-    const gap = 5;
+    const segW = 26;
+    const segH = 20;
+    const gap = 4;
     const totalW = segs * segW + (segs - 1) * gap;
     const startX = W / 2 - totalW / 2;
-    this.volGfx = this.add.graphics().setDepth(5);
-    this.volPct = this.add.text(startX + totalW + 16, cy, '', {
-      fontFamily: 'monospace', fontSize: '20px', color: '#ffffff', fontStyle: 'bold',
+    const gfx = this.add.graphics().setDepth(5);
+    this.add.text(startX - 18, cy, label, {
+      fontFamily: 'monospace', fontSize: '16px', color: '#ffffff', fontStyle: 'bold',
+      stroke: '#000000', strokeThickness: 3,
+    }).setOrigin(1, 0.5).setDepth(6);
+    const pct = this.add.text(startX + totalW + 16, cy, '', {
+      fontFamily: 'monospace', fontSize: '16px', color: '#ffffff', fontStyle: 'bold',
       stroke: '#000000', strokeThickness: 3,
     }).setOrigin(0, 0.5).setDepth(6);
 
     const draw = () => {
-      const v = Audio.getVolume();
+      const v = get();
       const lit = Math.round(v * segs);
-      const g = this.volGfx;
-      g.clear();
+      gfx.clear();
       for (let i = 0; i < segs; i += 1) {
         const x = startX + i * (segW + gap);
         const on = i < lit;
         const col = i < 4 ? 0x57c75a : (i < 7 ? 0xffe14d : 0xff7a3c);
-        g.fillStyle(0x000000, 0.4); g.fillRoundedRect(x + 2, cy - segH / 2 + 3, segW, segH, 5);
-        g.fillStyle(on ? col : 0x2a2440, on ? 1 : 0.55); g.fillRoundedRect(x, cy - segH / 2, segW, segH, 5);
-        g.lineStyle(2, 0xffffff, on ? 0.95 : 0.3); g.strokeRoundedRect(x, cy - segH / 2, segW, segH, 5);
+        gfx.fillStyle(0x000000, 0.4); gfx.fillRoundedRect(x + 2, cy - segH / 2 + 3, segW, segH, 5);
+        gfx.fillStyle(on ? col : 0x2a2440, on ? 1 : 0.55); gfx.fillRoundedRect(x, cy - segH / 2, segW, segH, 5);
+        gfx.lineStyle(2, 0xffffff, on ? 0.95 : 0.3); gfx.strokeRoundedRect(x, cy - segH / 2, segW, segH, 5);
       }
-      this.volPct.setText(`${Math.round(v * 100)}%`);
+      pct.setText(`${Math.round(v * 100)}%`);
     };
-    this.redrawVolume = draw;
 
     for (let i = 0; i < segs; i += 1) {
       const x = startX + i * (segW + gap);
-      const zone = this.add.zone(x + segW / 2, cy, segW + gap, segH + 12).setInteractive({ useHandCursor: true });
+      const zone = this.add.zone(x + segW / 2, cy, segW + gap, segH + 8).setInteractive({ useHandCursor: true });
       zone.on('pointerdown', () => {
         Audio.resumeAudio();
-        Audio.setVolume((i + 1) / segs);
+        set((i + 1) / segs);
         Audio.sfx('beep');
         draw();
-        if (this.promptText) this.promptText.setText(`Saved — volume: ${Math.round(Audio.getVolume() * 100)}%`);
+        if (this.promptText) this.promptText.setText(`Saved — ${label.toLowerCase()} volume: ${Math.round(get() * 100)}%`);
       });
     }
     draw();

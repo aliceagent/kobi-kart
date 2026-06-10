@@ -15,11 +15,15 @@
 let ctx = null;
 let master = null;     // mix bus (unity gain) — every voice and SFX connects here
 let masterOut = null;  // final stage: master volume + mute
-let musicBus = null;   // music submix → master, so big SFX can briefly duck it
+let musicBus = null;   // music submix (ducking) → musicVolBus → master
+let musicVolBus = null; // user music volume
+let sfxBus = null;      // every SFX/engine voice → master, carries user SFX volume
 let enabled = true;
 let muted = false;
 const MAX_GAIN = 0.6;  // masterOut gain at 100% volume
 let volFrac = 0.75;    // user volume 0..1 (default → 0.45 gain, the original level)
+let musicFrac = 1;     // user music volume 0..1 (relative to master)
+let sfxFrac = 1;       // user SFX volume 0..1 (relative to master)
 
 function outGain() { return muted ? 0 : volFrac * MAX_GAIN; }
 
@@ -65,11 +69,23 @@ function ensure() {
     master.gain.value = 1;
     master.connect(comp);
 
+    // SFX submix: every SFX/engine voice routes through here so the player
+    // can balance effects against the music independently of master volume.
+    sfxBus = ctx.createGain();
+    sfxBus.gain.value = sfxFrac;
+    sfxBus.connect(master);
+
+    // User music volume — a separate node from the duck bus so duckMusic's
+    // transient ramps never fight (or overwrite) the chosen level.
+    musicVolBus = ctx.createGain();
+    musicVolBus.gain.value = musicFrac;
+    musicVolBus.connect(master);
+
     // Music submix: the music routes through here so a big SFX can briefly dip
-    // it (duckMusic) and punch through. SFX + engine stay on the dry `master`.
+    // it (duckMusic) and punch through.
     musicBus = ctx.createGain();
     musicBus.gain.value = 1;
-    musicBus.connect(master);
+    musicBus.connect(musicVolBus);
 
     // A short, high-passed reverb send adds a sense of space and glues the
     // chiptune without muddying the low end (bass/kick stay tight).
@@ -108,6 +124,22 @@ export function toggleMute() {
 }
 
 export function getVolume() { return volFrac; }
+
+export function getMusicVolume() { return musicFrac; }
+
+export function setMusicVolume(frac) {
+  musicFrac = Math.max(0, Math.min(1, frac == null ? 1 : frac));
+  if (musicVolBus) musicVolBus.gain.value = musicFrac;
+  try { window.localStorage.setItem('kobikart.musicVol', String(musicFrac)); } catch (e) { /* ignore */ }
+}
+
+export function getSfxVolume() { return sfxFrac; }
+
+export function setSfxVolume(frac) {
+  sfxFrac = Math.max(0, Math.min(1, frac == null ? 1 : frac));
+  if (sfxBus) sfxBus.gain.value = sfxFrac;
+  try { window.localStorage.setItem('kobikart.sfxVol', String(sfxFrac)); } catch (e) { /* ignore */ }
+}
 
 export function setVolume(frac) {
   volFrac = Math.max(0, Math.min(1, frac || 0));
@@ -163,7 +195,7 @@ function toneAt(freq, at, dur, type, gain, dest, detune) {
     g.gain.exponentialRampToValueAtTime(gain, at + 0.01);
     g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
     osc.connect(g);
-    g.connect(dest || master);
+    g.connect(dest || sfxBus);
     osc.start(at);
     osc.stop(at + dur + 0.02);
   } catch (e) { /* ignore */ }
@@ -171,7 +203,7 @@ function toneAt(freq, at, dur, type, gain, dest, detune) {
 
 function drumAt(kind, at, gain, dest) {
   const c = ctx;
-  const out = dest || master;
+  const out = dest || sfxBus;
   try {
     if (kind === 'k') {
       const osc = c.createOscillator();
@@ -225,7 +257,7 @@ function sweepAt(f0, f1, at, dur, type, gain) {
     g.gain.setValueAtTime(0.0001, at);
     g.gain.exponentialRampToValueAtTime(gain, at + Math.min(0.02, dur * 0.3));
     g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
-    osc.connect(g); g.connect(master);
+    osc.connect(g); g.connect(sfxBus);
     osc.start(at); osc.stop(at + dur + 0.03);
   } catch (e) { /* ignore */ }
 }
@@ -250,7 +282,7 @@ function noiseAt(at, dur, gain, filt, f0, f1, q) {
     g.gain.setValueAtTime(0.0001, at);
     g.gain.exponentialRampToValueAtTime(gain, at + Math.min(0.015, dur * 0.25));
     g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
-    src.connect(bq); bq.connect(g); g.connect(master);
+    src.connect(bq); bq.connect(g); g.connect(sfxBus);
     src.start(at); src.stop(at + dur + 0.03);
   } catch (e) { /* ignore */ }
 }
@@ -830,7 +862,7 @@ export function startEngine(id) {
     filter.Q.value = 4.5; // a touch of resonance → a motor-ish growl
     const gain = c.createGain();
     gain.gain.value = 0.0001; // silent until updateEngine fades it in
-    osc.connect(filter); sub.connect(filter); filter.connect(gain); gain.connect(master);
+    osc.connect(filter); sub.connect(filter); filter.connect(gain); gain.connect(sfxBus);
     osc.start(); sub.start();
     engines[id] = { osc, sub, filter, gain };
   } catch (e) { /* ignore */ }

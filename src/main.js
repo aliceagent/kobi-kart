@@ -36,10 +36,14 @@ class BootScene extends Phaser.Scene {
       if (sp === 'slow' || sp === 'medium' || sp === 'fast') speed = sp;
     } catch (e) { /* ignore */ }
     this.registry.set('carSpeed', speed);
-    // Seed the saved master volume (0..1; defaults to 0.75).
+    // Seed the saved volumes (0..1; master defaults 0.75, buses to 1).
     try {
       const v = parseFloat(window.localStorage.getItem('kobikart.volume'));
       if (v >= 0 && v <= 1) Audio.setVolume(v);
+      const mv = parseFloat(window.localStorage.getItem('kobikart.musicVol'));
+      if (mv >= 0 && mv <= 1) Audio.setMusicVolume(mv);
+      const sv = parseFloat(window.localStorage.getItem('kobikart.sfxVol'));
+      if (sv >= 0 && sv <= 1) Audio.setSfxVolume(sv);
     } catch (e) { /* ignore */ }
     this.scene.start('TitleScene');
   }
