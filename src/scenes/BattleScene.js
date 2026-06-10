@@ -3,7 +3,7 @@ import Kart from '../Kart.js';
 import { ROSTER, kartClass } from '../GrandPrix.js';
 import { makeKartTexture, makeGameTextures } from '../textures.js';
 import * as Audio from '../Audio.js';
-import { addMuteButton, fadeIn, transitionTo } from '../ui.js';
+import { addMuteButton, fadeIn, transitionTo, textStrokeFor } from '../ui.js';
 
 // Balloon Battle: a single-screen walled arena (no laps). 2 players + 2-or-4 AI
 // fight; each kart has 3 balloons; a spin-out hit pops one; last kart with
@@ -1184,7 +1184,7 @@ export default class BattleScene extends Phaser.Scene {
     const hex = `#${color.toString(16).padStart(6, '0')}`;
     const t = this.add.text(ARENA.x + 6, 0, msg, {
       fontFamily: 'monospace', fontSize: '13px', color: hex, fontStyle: 'bold',
-      stroke: '#000000', strokeThickness: 3,
+      stroke: textStrokeFor(color), strokeThickness: 3,
     }).setDepth(32);
     this.feed.unshift({ t, life: 3 });
     while (this.feed.length > 4) this.feed.pop().t.destroy();

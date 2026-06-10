@@ -24,6 +24,16 @@ export function transitionTo(scene, key, data, opts = {}) {
   });
 }
 
+// A readable stroke colour for text drawn in an arbitrary kart colour: dark
+// colours (like the Black kart) get a light stroke so they never vanish into
+// dark backdrops; light colours get a dark stroke.
+export function textStrokeFor(color) {
+  const r = (color >> 16) & 0xff;
+  const g = (color >> 8) & 0xff;
+  const b = color & 0xff;
+  return (0.299 * r + 0.587 * g + 0.114 * b) < 110 ? '#e8e8f2' : '#10101a';
+}
+
 // A small speaker toggle in the bottom-right corner, plus the "M" key.
 export function addMuteButton(scene) {
   const x = scene.scale.width - 28;

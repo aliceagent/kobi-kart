@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
-import { totalStandings } from '../GrandPrix.js';
+import { totalStandings, cupById } from '../GrandPrix.js';
 import * as Audio from '../Audio.js';
-import { addMuteButton, fadeIn, transitionTo } from '../ui.js';
+import { addMuteButton, fadeIn, transitionTo, textStrokeFor } from '../ui.js';
 
 export default class CeremonyScene extends Phaser.Scene {
   constructor() {
@@ -58,14 +58,17 @@ export default class CeremonyScene extends Phaser.Scene {
       tint: [0xff5d8f, 0x4d8bff, 0xffd23f, 0x57c75a, 0xb06bff, 0xffffff, 0xff8a3c],
     }).setDepth(30);
 
-    this.add.text(W / 2, 44, 'GRAND PRIX CHAMPION', {
+    this.add.text(W / 2, 44, `${cupById(this.gp.cup).name} CHAMPION`, {
       fontFamily: 'monospace', fontSize: '30px', color: '#ffe14d', fontStyle: 'bold',
       stroke: '#7a3bbf', strokeThickness: 6,
     }).setOrigin(0.5).setDepth(22);
 
+    // The name is tinted in the kart's colour — a contrast stroke keeps dark
+    // karts (Black!) readable against the dark sky.
     const champName = this.add.text(W / 2, 92, `${champ.name}!`, {
       fontFamily: 'monospace', fontSize: '42px', fontStyle: 'bold',
       color: Phaser.Display.Color.IntegerToColor(champ.color).rgba,
+      stroke: textStrokeFor(champ.color), strokeThickness: 6,
     }).setOrigin(0.5).setDepth(22);
     this.tweens.add({ targets: champName, scale: { from: 1, to: 1.12 }, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
 
@@ -89,19 +92,23 @@ export default class CeremonyScene extends Phaser.Scene {
       kart.rotation = -Math.PI / 2;
       this.tweens.add({ targets: kart, y: top - 44, duration: 650, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
 
-      // The champion's kart is bigger and wears the trophy, so their name sits
-      // above the trophy instead of behind it.
-      this.add.text(slot.x, slot.rank === 1 ? top - 134 : top - 66, racer.name, {
-        fontFamily: 'monospace', fontSize: '16px', fontStyle: 'bold',
-        color: Phaser.Display.Color.IntegerToColor(racer.color).rgba,
-      }).setOrigin(0.5).setDepth(12);
+      // Runner-up name tags. The champion's column skips the tag — their name
+      // is already the giant headline, and the trophy floats up there.
+      if (slot.rank !== 1) {
+        this.add.text(slot.x, top - 66, racer.name, {
+          fontFamily: 'monospace', fontSize: '16px', fontStyle: 'bold',
+          color: Phaser.Display.Color.IntegerToColor(racer.color).rgba,
+          stroke: textStrokeFor(racer.color), strokeThickness: 3,
+        }).setOrigin(0.5).setDepth(12);
+      }
       this.add.text(slot.x, baseY + 18, `${racer.points} pts`, {
         fontFamily: 'monospace', fontSize: '15px', color: '#ffffff',
       }).setOrigin(0.5).setDepth(12);
     });
 
-    // Trophy above the champion.
-    this.drawTrophy(W / 2, baseY - slots[0].h - 92);
+    // Trophy floats clear above the champion's kart (the kart bobs up to
+    // ~92px above the podium, and the trophy graphic extends ~52px downward).
+    this.drawTrophy(W / 2, baseY - slots[0].h - 154);
 
     if (standings[3]) {
       this.add.text(W / 2, baseY + 48, `4th: ${standings[3].name} (${standings[3].points} pts)`, {

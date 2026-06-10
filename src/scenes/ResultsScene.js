@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { totalStandings } from '../GrandPrix.js';
 import * as Audio from '../Audio.js';
-import { addMuteButton, fadeIn, transitionTo } from '../ui.js';
+import { addMuteButton, fadeIn, transitionTo, textStrokeFor } from '../ui.js';
 
 const MEDAL = [0xffd23f, 0xc7ccd6, 0xcd7f32, 0x8a8f96]; // gold / silver / bronze / grey
 const ORD = ['1st', '2nd', '3rd', '4th'];
@@ -81,6 +81,7 @@ export default class ResultsScene extends Phaser.Scene {
       container.add(this.add.text(mx + 110, 0, `${ORD[i]}  ${r.name}`, {
         fontFamily: 'monospace', fontSize: '22px', fontStyle: 'bold',
         color: Phaser.Display.Color.IntegerToColor(r.color).rgba,
+        stroke: textStrokeFor(r.color), strokeThickness: 3,
       }).setOrigin(0, 0.5));
 
       // Best-lap readout (gold + a ⚡ for the race's fastest lap). Sits right
@@ -139,6 +140,7 @@ export default class ResultsScene extends Phaser.Scene {
       this.add.text(sx - miniW / 2 + 66, sy, r.name, {
         fontFamily: 'monospace', fontSize: '15px', fontStyle: 'bold',
         color: Phaser.Display.Color.IntegerToColor(r.color).rgba,
+        stroke: textStrokeFor(r.color), strokeThickness: 3,
       }).setOrigin(0, 0.5).setDepth(6);
       this.add.text(sx + miniW / 2 - 14, sy, `${r.points}`, {
         fontFamily: 'monospace', fontSize: '20px', color: '#ffffff', fontStyle: 'bold',
