@@ -284,6 +284,7 @@ export default class BattleScene extends Phaser.Scene {
       kart.aiTimer = 0;
       kart.hitsTaken = 0; // timeout tiebreak: fewer hits taken wins
       kart.stealCd = 0; // ram-steal guard: one theft per spin-out
+      kart.ghost = false; // eliminated karts haunt the arena instead of vanishing
       this.karts.push(kart);
       if (!kart.isAI) this.humans.push(kart);
     });
@@ -348,7 +349,7 @@ export default class BattleScene extends Phaser.Scene {
 
     this.updateMatchTimer(dt);
     this.karts.forEach((k) => {
-      if (!k.out) k.frozen = false;
+      if (!k.out || k.ghost) k.frozen = false;
       if (k.battleInvuln > 0) k.battleInvuln -= dt;
       if (k.stealCd > 0) k.stealCd -= dt;
     });
@@ -413,7 +414,10 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   driveKart(kart, dt) {
-    if (kart.out) return;
+    if (kart.out) {
+      if (kart.ghost) this.driveGhost(kart, dt);
+      return;
+    }
     let input;
     let fire = false;
     if (kart.isAI) {
@@ -436,6 +440,37 @@ export default class BattleScene extends Phaser.Scene {
     if (fire) this.useItem(kart);
     kart.drive(dt, input.steer, input.braking, input.boosting, true, { grip: this.arena.grip });
     this.clampToArena(kart);
+  }
+
+  // Ghosts keep the couch player engaged: slow, intangible, no items — but
+  // they can still drive (humans keep their keys, AI wanders) and drop an oil
+  // slick every so often to stir the living.
+  driveGhost(kart, dt) {
+    let input;
+    if (kart.isAI) {
+      kart.ghostWander -= dt;
+      if (kart.ghostWander <= 0) {
+        const bd = this.bounds;
+        kart.ghostTarget = { x: bd.x + 40 + Math.random() * (bd.w - 80), y: bd.y + 40 + Math.random() * (bd.h - 80) };
+        kart.ghostWander = 2.5 + Math.random() * 2;
+      }
+      input = this.steerToward(kart, kart.ghostTarget.x, kart.ghostTarget.y, false);
+    } else if (kart === this.humans[0]) {
+      input = this.readKeys(this.keysP1);
+      if (this.soloDualInput) {
+        const in2 = this.readKeys(this.keysP2);
+        input = { steer: Phaser.Math.Clamp(input.steer + in2.steer, -1, 1), braking: input.braking || in2.braking, boosting: input.boosting || in2.boosting };
+      }
+    } else {
+      input = this.readKeys(this.keysP2);
+    }
+    kart.drive(dt, input.steer, input.braking, input.boosting, true, { grip: this.arena.grip });
+    this.clampToArena(kart);
+    kart.ghostDropTimer -= dt;
+    if (kart.ghostDropTimer <= 0) {
+      kart.ghostDropTimer = 8 + Math.random() * 4;
+      this.spawnTrap(kart);
+    }
   }
 
   // Decision stack: dodge incoming fire → survive on the last balloon → shop
@@ -573,7 +608,7 @@ export default class BattleScene extends Phaser.Scene {
   updateEngines() {
     if (!this.engineOn) return;
     for (const h of this.humans) {
-      if (h.out) { Audio.updateEngine(h.id, 0, false); continue; }
+      if (h.out && !h.ghost) { Audio.updateEngine(h.id, 0, false); continue; }
       const sf = Math.max(0, h.speed) / 340;
       Audio.updateEngine(h.id, sf, h.boosting || h.itemBoostTimer > 0 || h.padBoostTimer > 0);
     }
@@ -912,11 +947,22 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   eliminate(kart) {
-    kart.out = true;
-    kart.frozen = true;
-    kart.sprite.setVisible(false);
+    kart.out = true; // out of the running — every hit/steal/pickup site skips out karts
+    kart.ghost = true; // ...but they haunt the arena instead of vanishing
+    kart.heldItem = null;
+    kart.orbitShells = 0;
+    kart.spinTimer = 0;
+    kart.shieldTimer = 0;
+    kart.starTimer = 0;
+    kart.speedScale = 0.55; // ghosts drift slowly
+    kart.sprite.setAlpha(0.35);
+    if (kart.sprite.isTinted) kart.sprite.clearTint();
+    kart.ghostDropTimer = 6 + Math.random() * 4;
+    kart.ghostWander = 0;
+    kart.ghostTarget = this.center();
     this.burst(kart.x, kart.y, kart.color);
     Audio.sfx('zap');
+    this.floatPopup(kart.x, kart.y - 26, 'GHOST!', '#cdbfff');
   }
 
   checkWin() {
@@ -1062,8 +1108,22 @@ export default class BattleScene extends Phaser.Scene {
         g.lineStyle(1.5, 0xffffff, on ? 0.9 : 0.3); g.strokeCircle(bx, y - 1, 6.5);
         g.lineStyle(1.5, 0xffffff, on ? 0.7 : 0.2); g.beginPath(); g.moveTo(bx, y + 5.5); g.lineTo(bx, y + 10); g.strokePath();
       }
-      if (k.heldItem && !k.out) this.drawItemIcon(g, x + slotW / 2 - 18, y, k.heldItem);
+      if (k.ghost) this.drawGhostIcon(g, x + slotW / 2 - 18, y);
+      else if (k.heldItem && !k.out) this.drawItemIcon(g, x + slotW / 2 - 18, y, k.heldItem);
     });
+  }
+
+  // A tiny sheet-ghost for the HUD chip of an eliminated (haunting) kart.
+  drawGhostIcon(g, cx, cy) {
+    g.fillStyle(0xffffff, 0.85);
+    g.fillCircle(cx, cy - 2, 5.5);
+    g.fillRect(cx - 5.5, cy - 2, 11, 6);
+    g.fillCircle(cx - 3.5, cy + 4, 1.8);
+    g.fillCircle(cx, cy + 4, 1.8);
+    g.fillCircle(cx + 3.5, cy + 4, 1.8);
+    g.fillStyle(0x2a2a33, 1);
+    g.fillCircle(cx - 2, cy - 2, 1.2);
+    g.fillCircle(cx + 2, cy - 2, 1.2);
   }
 
   // Tiny held-item glyphs for the HUD chips (kept crude but readable at 14px).
