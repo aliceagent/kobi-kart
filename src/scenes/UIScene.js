@@ -396,12 +396,16 @@ export default class UIScene extends Phaser.Scene {
       this.attractText.setText('');
     }
 
-    // When only the last racer remains, show their 60s finish clock.
+    // Finish clock: once every AI is home, the human player(s) get 60s — shown
+    // here. (If only AI remain, it's a short wind-down notice instead.)
     if (race.stragglerDeadline !== null && race.state === 'racing') {
       const left = Math.max(0, Math.ceil(race.stragglerDeadline - race.raceElapsed));
-      this.stragglerText.setText(`LAST RACER — ${left}s to finish`);
+      const humanRacing = race.humans.some((h) => !h.finished);
+      this.stragglerText.setText(humanRacing ? `⏱ FINISH IN ${left}s` : `race ends in ${left}s`);
+      this.stragglerText.setAlpha(left <= 10 ? 0.55 + 0.45 * Math.sin(race.elapsed * 10) : 1);
     } else {
       this.stragglerText.setText('');
+      this.stragglerText.setAlpha(1);
     }
 
     const h0 = race.humans[0];

@@ -14,8 +14,9 @@ const RAIL_MIN_SPEED = 100;
 const OBSTACLE_MIN_SPEED = 90;
 // Race ends when everyone finishes — or, once 60s have passed, as soon as only
 // a single straggler is left. A generous hard cap prevents a true soft-lock.
-const STRAGGLER_GRACE = 60; // seconds the last racer gets after the 3rd finisher
-const RACE_HARD_CAP = 240; // absolute safety cap (since GO)
+const STRAGGLER_GRACE = 60; // seconds humans get to finish once every AI is home
+const AI_WINDDOWN = 15; // seconds leftover AI get once every human is home
+const RACE_HARD_CAP = 480; // absolute safety net (since GO) — never cuts a granted grace short
 
 // Position-based item odds (Mario-Kart style): leaders get defensive/area-denial
 // items, trailers get catch-up items. Keyed by live race position (1 = first).
@@ -434,10 +435,22 @@ export default class RaceScene extends Phaser.Scene {
       const gap = first ? kart.finishTime - first.finishTime : 99;
       if (gap <= 0.7 && (!first.isAI || !kart.isAI)) this.startPhotoFinish();
     }
-    // Once everyone but the last racer is in, give that straggler 60s to finish.
-    const unfinished = this.racers.reduce((c, r) => c + (r.finished ? 0 : 1), 0);
-    if (unfinished === 1 && this.stragglerDeadline === null) {
-      this.stragglerDeadline = this.raceElapsed + STRAGGLER_GRACE;
+    // The finish clock starts once every AI is home: remaining human players
+    // share a 60s window (counted down on the HUD). The reverse case — all
+    // humans home, AI still circling — gets a short wind-down instead, since
+    // endRace places leftover AI by progress anyway. The attract demo keeps a
+    // small grace for its lone straggler.
+    if (this.stragglerDeadline === null) {
+      const aiLeft = this.racers.some((r) => r.isAI && !r.finished);
+      const humansLeft = this.racers.some((r) => !r.isAI && !r.finished);
+      const unfinished = this.racers.reduce((c, r) => c + (r.finished ? 0 : 1), 0);
+      if (this.humans.length > 0 && !aiLeft && humansLeft) {
+        this.stragglerDeadline = this.raceElapsed + STRAGGLER_GRACE;
+      } else if (this.humans.length > 0 && !humansLeft && aiLeft) {
+        this.stragglerDeadline = this.raceElapsed + AI_WINDDOWN;
+      } else if (this.humans.length === 0 && unfinished === 1) {
+        this.stragglerDeadline = this.raceElapsed + 20;
+      }
     }
   }
 
@@ -1115,7 +1128,7 @@ export default class RaceScene extends Phaser.Scene {
     const unfinished = this.racers.reduce((c, r) => c + (r.finished ? 0 : 1), 0);
     if (unfinished === 0
       || (this.stragglerDeadline !== null && this.raceElapsed >= this.stragglerDeadline)
-      || this.raceElapsed >= RACE_HARD_CAP) {
+      || (this.stragglerDeadline === null && this.raceElapsed >= RACE_HARD_CAP)) {
       this.endRace();
     }
 
