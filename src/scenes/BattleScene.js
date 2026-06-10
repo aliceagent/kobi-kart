@@ -111,6 +111,10 @@ export default class BattleScene extends Phaser.Scene {
       stroke: '#000000', strokeThickness: 4,
     }).setOrigin(1, 0.5).setDepth(31);
 
+    // Bonus balloon: floats near the centre every ~20s; grab it to restore one.
+    this.bonusBalloon = null;
+    this.balloonTimer = 14;
+
     Audio.resumeAudio();
     Audio.startMusic(this.arena.music || 'Carnival');
     this.engineOn = false;
@@ -255,6 +259,7 @@ export default class BattleScene extends Phaser.Scene {
       kart.out = false;
       kart.aiTimer = 0;
       kart.hitsTaken = 0; // timeout tiebreak: fewer hits taken wins
+      kart.stealCd = 0; // ram-steal guard: one theft per spin-out
       this.karts.push(kart);
       if (!kart.isAI) this.humans.push(kart);
     });
@@ -318,11 +323,16 @@ export default class BattleScene extends Phaser.Scene {
     if (this.state === 'over') { this.drawHazards(0); this.drawHUD(); this.drawDynamic(); return; }
 
     this.updateMatchTimer(dt);
-    this.karts.forEach((k) => { if (!k.out) k.frozen = false; if (k.battleInvuln > 0) k.battleInvuln -= dt; });
+    this.karts.forEach((k) => {
+      if (!k.out) k.frozen = false;
+      if (k.battleInvuln > 0) k.battleInvuln -= dt;
+      if (k.stealCd > 0) k.stealCd -= dt;
+    });
     this.karts.forEach((k) => this.driveKart(k, dt));
     this.karts.forEach((k) => this.releaseMiniTurbo(k));
     this.karts.forEach((k) => this.resolveBlocks(k));
     this.updateItemBoxes(dt);
+    this.updateBonusBalloon(dt);
     this.updateProjectiles(dt);
     this.updateTraps(dt);
     this.updateGeysers(dt);
@@ -650,8 +660,14 @@ export default class BattleScene extends Phaser.Scene {
     const aStar = a.starTimer > 0; const bStar = b.starTimer > 0;
     if (aStar !== bStar) {
       const victim = aStar ? b : a; const sign = aStar ? 1 : -1;
+      const thief = aStar ? a : b;
       victim.x += nx * overlap * sign; victim.y += ny * overlap * sign;
-      if (victim.hit()) { victim.knockX += nx * sign * 340; victim.knockY += ny * sign * 340; this.burst(victim.x, victim.y, 0xffe14d); Audio.sfx('hit'); this.popBalloon(victim); }
+      if (victim.hit()) {
+        victim.knockX += nx * sign * 340; victim.knockY += ny * sign * 340;
+        this.burst(victim.x, victim.y, 0xffe14d); Audio.sfx('hit');
+        // A star contact steals the balloon when there's room for it.
+        if (!this.stealBalloon(thief, victim, true)) this.popBalloon(victim);
+      }
       return;
     }
     a.x -= (nx * overlap) / 2; a.y -= (ny * overlap) / 2;
@@ -660,9 +676,83 @@ export default class BattleScene extends Phaser.Scene {
     a.knockX -= nx * push * 0.5; a.knockY -= ny * push * 0.5;
     b.knockX += nx * push * 0.5; b.knockY += ny * push * 0.5;
     if (!a.isAI || !b.isAI) Audio.sfx('bump');
+    // Ramming a spun-out rival steals one of their balloons (once per spin).
+    if (a.spunOut !== b.spunOut) {
+      const victim = a.spunOut ? a : b;
+      const thief = a.spunOut ? b : a;
+      this.stealBalloon(thief, victim, false);
+    }
   }
 
   // ------------------------------------------------------------- balloons -----
+  // Transfer one balloon from victim to thief. `asHit` means this steal IS the
+  // hit event (star contact): it respects + sets battleInvuln like a pop.
+  // Otherwise (ramming an already-spinning kart) it's an extra theft guarded by
+  // stealCd, so each spin-out can only be robbed once.
+  stealBalloon(thief, victim, asHit) {
+    if (thief.out || victim.out || thief.balloons >= START_BALLOONS) return false;
+    if (asHit) {
+      if (victim.battleInvuln > 0) return false;
+    } else if (victim.stealCd > 0 || victim.spinTimer <= 0) {
+      return false;
+    }
+    victim.balloons -= 1;
+    victim.hitsTaken += 1;
+    if (asHit) victim.battleInvuln = 2; else victim.stealCd = 2.5;
+    thief.balloons = Math.min(START_BALLOONS, thief.balloons + 1);
+    this.burst(victim.x, victim.y, victim.color);
+    this.burst(thief.x, thief.y, 0xffe14d);
+    if (!thief.isAI || !victim.isAI) Audio.sfx('coin');
+    this.floatPopup(thief.x, thief.y - 26, 'STOLE!', '#ffe14d');
+    this.cameras.main.shake(100, 0.005);
+    if (victim.balloons <= 0) this.eliminate(victim);
+    this.checkWin();
+    return true;
+  }
+
+  floatPopup(x, y, msg, color) {
+    const t = this.add.text(x, y, msg, {
+      fontFamily: 'monospace', fontSize: '18px', color, fontStyle: 'bold',
+      stroke: '#000000', strokeThickness: 4,
+    }).setOrigin(0.5).setDepth(40);
+    this.tweens.add({ targets: t, y: y - 44, alpha: { from: 1, to: 0 }, duration: 900, ease: 'Cubic.Out', onComplete: () => t.destroy() });
+  }
+
+  // The floating bonus balloon: first hurt kart to touch it gets one back.
+  updateBonusBalloon(dt) {
+    if (!this.bonusBalloon) {
+      this.balloonTimer -= dt;
+      if (this.balloonTimer <= 0) this.spawnBonusBalloon();
+      return;
+    }
+    const bb = this.bonusBalloon;
+    const bd = this.bounds; // stay inside the closing ring during sudden death
+    bb.x = Phaser.Math.Clamp(bb.x, bd.x + 24, bd.x + bd.w - 24);
+    bb.y = Phaser.Math.Clamp(bb.y, bd.y + 24, bd.y + bd.h - 24);
+    for (const k of this.karts) {
+      if (k.out || k.balloons >= START_BALLOONS) continue;
+      if ((k.x - bb.x) ** 2 + (k.y - bb.y) ** 2 < (k.radius + 15) ** 2) {
+        k.balloons += 1;
+        this.bonusBalloon = null;
+        this.balloonTimer = 20;
+        this.burst(bb.x, bb.y, k.color);
+        if (!k.isAI) Audio.sfx('pickup');
+        this.floatPopup(k.x, k.y - 26, '+1 BALLOON', '#9fe8ff');
+        return;
+      }
+    }
+  }
+
+  spawnBonusBalloon() {
+    const bd = this.bounds;
+    for (let tries = 0; tries < 10; tries += 1) {
+      const x = bd.x + bd.w / 2 + (Math.random() - 0.5) * Math.min(240, bd.w * 0.4);
+      const y = bd.y + bd.h / 2 + (Math.random() - 0.5) * Math.min(160, bd.h * 0.4);
+      if (!this.blocked(x, y, 24)) { this.bonusBalloon = { x, y }; return; }
+    }
+    this.balloonTimer = 6; // centre crowded by arena features — retry shortly
+  }
+
   popBalloon(kart) {
     if (kart.out || kart.battleInvuln > 0) return;
     kart.balloons -= 1;
@@ -771,6 +861,16 @@ export default class BattleScene extends Phaser.Scene {
 
   drawDynamic() {
     const g = this.dynGfx; g.clear();
+    // Bonus balloon — bobbing, with a string and a shine.
+    if (this.bonusBalloon) {
+      const bb = this.bonusBalloon;
+      const by = bb.y + Math.sin(this.elapsed * 3) * 4;
+      g.lineStyle(1.5, 0xffffff, 0.7);
+      g.beginPath(); g.moveTo(bb.x, by + 13); g.lineTo(bb.x + 3, by + 26); g.strokePath();
+      g.fillStyle(0xff5d8f, 1); g.fillEllipse(bb.x, by, 22, 27);
+      g.fillStyle(0xffffff, 0.45); g.fillCircle(bb.x - 5, by - 7, 4);
+      g.lineStyle(2, 0xffffff, 0.85); g.strokeEllipse(bb.x, by, 22, 27);
+    }
     for (const k of this.karts) {
       if (k.out) continue;
       if (k.shieldTimer > 0) { g.lineStyle(3, 0x9fe8ff, 0.8); g.strokeCircle(k.x, k.y, k.radius + 7); g.fillStyle(0x9fe8ff, 0.12); g.fillCircle(k.x, k.y, k.radius + 7); }
